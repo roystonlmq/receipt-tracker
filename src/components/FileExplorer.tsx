@@ -358,13 +358,18 @@ export function FileExplorer({
 	};
 
 	const handleSelectFolder = (folderDate: string) => {
+		console.log('handleSelectFolder called with:', folderDate);
 		setSelectedFolders((prev) => {
 			const newSet = new Set(prev);
+			console.log('Previous selected folders:', Array.from(prev));
 			if (newSet.has(folderDate)) {
 				newSet.delete(folderDate);
+				console.log('Removed folder:', folderDate);
 			} else {
 				newSet.add(folderDate);
+				console.log('Added folder:', folderDate);
 			}
+			console.log('New selected folders:', Array.from(newSet));
 			return newSet;
 		});
 	};
@@ -792,22 +797,41 @@ export function FileExplorer({
 										: "bg-white/5 hover:bg-white/10 border-white/10 hover:border-white/20"
 								}`}
 							>
-								{/* Selection checkbox */}
-								<input
-									type="checkbox"
-									checked={selectedFolders.has(folder.date)}
-									onChange={() => handleSelectFolder(folder.date)}
-									className="absolute top-3 right-3 w-5 h-5 rounded border-2 border-white/20 bg-white/10 checked:bg-blue-600 checked:border-blue-600 cursor-pointer"
-									onClick={(e) => e.stopPropagation()}
-								/>
-
-								{/* Folder button */}
+								{/* Selection checkbox - top left with higher z-index */}
 								<button
 									type="button"
-									onClick={() => handleFolderClick(folder.date)}
-									className="w-full text-left cursor-pointer"
+									className="absolute top-3 left-3 z-20 flex items-center justify-center w-6 h-6 bg-black/70 hover:bg-black/90 rounded-md cursor-pointer transition-all"
+									onClick={(e) => {
+										e.stopPropagation();
+										handleSelectFolder(folder.date);
+									}}
 								>
-									<Folder className="w-12 h-12 text-blue-400 mb-3 group-hover:scale-110 transition-transform" />
+									<div className={`relative w-4 h-4 border-2 rounded transition-all duration-200 ${
+										selectedFolders.has(folder.date)
+											? "bg-blue-500 border-blue-500 scale-110" 
+											: "border-white/60 scale-100"
+									}`}>
+										{selectedFolders.has(folder.date) && (
+											<svg
+												className="absolute inset-0 w-full h-full text-white animate-in fade-in zoom-in duration-200"
+												fill="none"
+												stroke="currentColor"
+												strokeWidth="3"
+												viewBox="0 0 24 24"
+											>
+												<path d="M5 13l4 4L19 7" strokeLinecap="round" strokeLinejoin="round" />
+											</svg>
+										)}
+									</div>
+								</button>
+
+								{/* Folder content - clickable area */}
+								<div 
+									className="cursor-pointer"
+									onClick={() => handleFolderClick(folder.date)}
+								>
+									{/* Add top margin to folder icon to avoid checkbox overlap */}
+									<Folder className="w-12 h-12 text-blue-400 mb-3 mt-6 group-hover:scale-110 transition-transform" />
 									<p className="text-white font-medium mb-1">
 										{folder.displayDate}
 									</p>
@@ -815,7 +839,7 @@ export function FileExplorer({
 										{folder.screenshotCount}{" "}
 										{folder.screenshotCount === 1 ? "screenshot" : "screenshots"}
 									</p>
-								</button>
+								</div>
 							</div>
 						))}
 					</div>

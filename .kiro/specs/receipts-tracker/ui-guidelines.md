@@ -190,24 +190,63 @@ This document defines the UI/UX patterns and design system for the Receipts Trac
 
 ### Cards
 
-**Selectable Card**:
+**Selectable Card (e.g., Folders)**:
 ```tsx
-<div className={`relative rounded-lg p-6 border-2 transition-all ${
-  isSelected 
-    ? "bg-blue-600/20 border-blue-500" 
-    : "bg-white/5 hover:bg-white/10 border-white/10 hover:border-white/20"
-}`}>
-  {/* Checkbox in top-right */}
-  <input
-    type="checkbox"
-    checked={isSelected}
-    onChange={onSelect}
-    className="absolute top-3 right-3 w-5 h-5 rounded border-2 border-white/20 bg-white/10 checked:bg-blue-600 checked:border-blue-600 cursor-pointer"
-  />
+<div 
+  className={`relative rounded-lg p-6 border-2 transition-all cursor-pointer ${
+    isSelected 
+      ? "bg-blue-600/20 border-blue-500" 
+      : "bg-white/5 hover:bg-white/10 border-white/10 hover:border-white/20"
+  }`}
+  onClick={onCardClick}
+>
+  {/* Custom checkbox in top-left */}
+  <div className="absolute top-3 left-3 z-10">
+    <label
+      className="flex items-center justify-center w-6 h-6 bg-black/70 hover:bg-black/90 rounded-md cursor-pointer transition-all"
+      onClick={(e) => {
+        e.stopPropagation();
+        onSelect();
+      }}
+    >
+      <input
+        type="checkbox"
+        checked={isSelected}
+        onChange={() => {}}
+        className="sr-only"
+      />
+      <div className={`relative w-4 h-4 border-2 rounded transition-all duration-200 ${
+        isSelected 
+          ? "bg-blue-500 border-blue-500 scale-110" 
+          : "border-white/60 scale-100"
+      }`}>
+        {isSelected && (
+          <svg
+            className="absolute inset-0 w-full h-full text-white animate-in fade-in zoom-in duration-200"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="3"
+            viewBox="0 0 24 24"
+          >
+            <path d="M5 13l4 4L19 7" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        )}
+      </div>
+    </label>
+  </div>
   
   {/* Card content */}
 </div>
 ```
+
+**Key Features**:
+- Custom styled checkbox with smooth animations
+- Blue background with white checkmark when selected
+- Scale animation on check/uncheck
+- Dark background container for better visibility
+- Checkbox positioned in top-left corner
+- Consistent with screenshot card design
+- Click handler on label prevents event bubbling to card
 
 ## Interaction Patterns
 
