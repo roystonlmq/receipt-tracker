@@ -1,4 +1,6 @@
-# Receipts tracking app. This app allows users to track screenshots or receipts of messages that occur throughout the day, so that they can review it or reorganize it e.g. save the screenshot to a particular project folder at the end of the day. This acts like a photo album classified by folders with dates DDMMYYYY. Each screenshot will be titled "DDMMYY - HHMM - screenshot.png" (with automatic incrementing to screenshot_2.png, screenshot_3.png, etc. for duplicates with the same date/time). 
+# Receipts tracking app. 
+
+This app allows users to track screenshots or receipts of messages that occur throughout the day, so that they can review it or reorganize it e.g. save the screenshot to a particular project folder at the end of the day. This acts like a photo album classified by folders with dates DDMMYYYY. Each screenshot will be titled "DDMMYY - HHMM - screenshot.png" (with automatic incrementing to screenshot_2.png, screenshot_3.png, etc. for duplicates with the same date/time). 
 
 This app is built with TanStack Start and uses raw PostgreSQL client for all database operations to ensure maximum reliability in Cloudflare Workers environment. Drizzle ORM is used for schema definition and migrations.
 
