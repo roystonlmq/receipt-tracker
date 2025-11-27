@@ -1,6 +1,6 @@
-import { StickyNote } from "lucide-react";
+import { useState, useRef, useEffect } from "react";
+import { StickyNote, Trash2, Edit2 } from "lucide-react";
 import type { Screenshot } from "@/types/screenshot";
-import { formatFolderDate } from "@/utils/filename";
 
 interface ScreenshotCardProps {
 	screenshot: Screenshot;
@@ -9,6 +9,7 @@ interface ScreenshotCardProps {
 	onRename: (id: number, newName: string) => void;
 	onDelete: (id: number) => void;
 	onView: (id: number) => void;
+	selectionMode: boolean;
 }
 
 export function ScreenshotCard({
@@ -16,13 +17,79 @@ export function ScreenshotCard({
 	isSelected,
 	onSelect,
 	onView,
+	onRename,
+	onDelete,
+	selectionMode,
 }: ScreenshotCardProps) {
+	const [isRenaming, setIsRenaming] = useState(false);
+	const [newName, setNewName] = useState("");
+	const inputRef = useRef<HTMLInputElement>(null);
+
+	useEffect(() => {
+		if (isRenaming && inputRef.current) {
+			inputRef.current.focus();
+			inputRef.current.select();
+		}
+	}, [isRenaming]);
+
 	const handleClick = () => {
+		// In selection mode, clicking toggles selection
+		// Otherwise, clicking views the screenshot
+		if (selectionMode) {
+			onSelect(screenshot.id);
+		} else {
+			onView(screenshot.id);
+		}
+	};
+
+	const handleCheckboxClick = (e: React.MouseEvent) => {
+		e.stopPropagation();
+		e.preventDefault();
 		onSelect(screenshot.id);
 	};
 
-	const handleDoubleClick = () => {
-		onView(screenshot.id);
+	const handleKeyDown = (e: React.KeyboardEvent) => {
+		if (isRenaming) return;
+
+		if (e.key === "Enter") {
+			onView(screenshot.id);
+		} else if (e.key === "F2") {
+			startRename();
+		} else if (e.key === "Delete") {
+			onDelete(screenshot.id);
+		}
+	};
+
+	const startRename = () => {
+		// Extract just the name part without extension
+		const nameMatch = screenshot.filename.match(/\d{6} - \d{4} - (.+)\.png$/i);
+		const currentName = nameMatch
+			? nameMatch[1]
+			: screenshot.filename.replace(/\.png$/i, "");
+		setNewName(currentName);
+		setIsRenaming(true);
+	};
+
+	const handleRenameSubmit = () => {
+		if (newName.trim()) {
+			onRename(screenshot.id, newName.trim());
+		}
+		setIsRenaming(false);
+	};
+
+	const handleRenameCancel = () => {
+		setIsRenaming(false);
+		setNewName("");
+	};
+
+	const handleRenameKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+		if (e.key === "Enter") {
+			e.preventDefault();
+			handleRenameSubmit();
+		} else if (e.key === "Escape") {
+			e.preventDefault();
+			handleRenameCancel();
+		}
 	};
 
 	const formatDate = (date: Date) => {
@@ -42,10 +109,8 @@ export function ScreenshotCard({
 					: "border-white/10 hover:border-white/30"
 			}`}
 			onClick={handleClick}
-			onDoubleClick={handleDoubleClick}
-			onKeyDown={(e) => {
-				if (e.key === "Enter") handleDoubleClick();
-			}}
+			onKeyDown={handleKeyDown}
+			tabIndex={0}
 		>
 			{/* Thumbnail */}
 			<div className="aspect-video bg-black/30 flex items-center justify-center overflow-hidden">
@@ -56,43 +121,106 @@ export function ScreenshotCard({
 				/>
 			</div>
 
-			{/* Info overlay */}
-			<div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/90 via-black/70 to-transparent p-3">
-				<div className="flex items-start justify-between gap-2">
-					<div className="flex-1 min-w-0">
-						<p className="text-sm font-medium text-white truncate">
-							{screenshot.filename}
-						</p>
-						<p className="text-xs text-white/60">
-							{formatDate(screenshot.uploadDate)}
-						</p>
+			{/* Checkbox - always visible in selection mode, shown on hover otherwise */}
+			<div
+				className={`absolute top-2 left-2 ${selectionMode ? "opacity-100" : "opacity-0 group-hover:opacity-100"} transition-opacity`}
+			>
+				<label
+					className="flex items-center justify-center w-6 h-6 bg-black/70 hover:bg-black/90 rounded-md cursor-pointer transition-all"
+					onClick={handleCheckboxClick}
+				>
+					<input
+						type="checkbox"
+						checked={isSelected}
+						onChange={() => {}}
+						className="sr-only"
+					/>
+					<div className={`relative w-4 h-4 border-2 rounded transition-all duration-200 ${
+						isSelected 
+							? "bg-blue-500 border-blue-500 scale-110" 
+							: "border-white/60 scale-100"
+					}`}>
+						{isSelected && (
+							<svg
+								className="absolute inset-0 w-full h-full text-white animate-in fade-in zoom-in duration-200"
+								fill="none"
+								stroke="currentColor"
+								strokeWidth="3"
+								viewBox="0 0 24 24"
+							>
+								<path d="M5 13l4 4L19 7" strokeLinecap="round" strokeLinejoin="round" />
+							</svg>
+						)}
 					</div>
-
-					{/* Notes indicator */}
-					{screenshot.notes && (
-						<div className="flex-shrink-0">
-							<StickyNote className="w-4 h-4 text-yellow-400" />
-						</div>
-					)}
-				</div>
+				</label>
 			</div>
 
-			{/* Selection indicator */}
-			{isSelected && (
-				<div className="absolute top-2 right-2 w-6 h-6 bg-blue-500 rounded-full flex items-center justify-center">
-					<svg
-						className="w-4 h-4 text-white"
-						fill="none"
-						strokeLinecap="round"
-						strokeLinejoin="round"
-						strokeWidth="2"
-						viewBox="0 0 24 24"
-						stroke="currentColor"
+			{/* Action buttons - shown on hover (only when not in selection mode) */}
+			{!selectionMode && (
+				<div className="absolute top-2 right-2 flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+					<button
+						type="button"
+						onClick={(e) => {
+							e.stopPropagation();
+							startRename();
+						}}
+						className="p-1.5 bg-black/70 hover:bg-black/90 rounded-md transition-colors"
+						title="Rename (F2)"
 					>
-						<path d="M5 13l4 4L19 7" />
-					</svg>
+						<Edit2 className="w-3.5 h-3.5 text-white" />
+					</button>
+					<button
+						type="button"
+						onClick={(e) => {
+							e.stopPropagation();
+							onDelete(screenshot.id);
+						}}
+						className="p-1.5 bg-black/70 hover:bg-red-600 rounded-md transition-colors"
+						title="Delete (Del)"
+					>
+						<Trash2 className="w-3.5 h-3.5 text-white" />
+					</button>
 				</div>
 			)}
+
+			{/* Info overlay */}
+			<div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/90 via-black/70 to-transparent p-3">
+				{isRenaming ? (
+					<div
+						className="flex items-center gap-2"
+						onClick={(e) => e.stopPropagation()}
+					>
+						<input
+							ref={inputRef}
+							type="text"
+							value={newName}
+							onChange={(e) => setNewName(e.target.value)}
+							onKeyDown={handleRenameKeyDown}
+							onBlur={handleRenameSubmit}
+							className="flex-1 px-2 py-1 text-sm bg-white/10 border border-white/20 rounded text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+							placeholder="Enter name..."
+						/>
+					</div>
+				) : (
+					<div className="flex items-start justify-between gap-2">
+						<div className="flex-1 min-w-0">
+							<p className="text-sm font-medium text-white truncate">
+								{screenshot.filename}
+							</p>
+							<p className="text-xs text-white/60">
+								{formatDate(screenshot.uploadDate)}
+							</p>
+						</div>
+
+						{/* Notes indicator */}
+						{screenshot.notes && (
+							<div className="flex-shrink-0">
+								<StickyNote className="w-4 h-4 text-yellow-400" />
+							</div>
+						)}
+					</div>
+				)}
+			</div>
 		</div>
 	);
 }

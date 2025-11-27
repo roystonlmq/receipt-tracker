@@ -1,0 +1,24 @@
+{
+  "enabled": true,
+  "name": "Documentation Sync",
+  "description": "Monitors TypeScript source files, configuration files, and database schema for changes and prompts the agent to update documentation in README.md or docs folder accordingly",
+  "version": "1",
+  "when": {
+    "type": "fileEdited",
+    "patterns": [
+      "src/**/*.ts",
+      "src/**/*.tsx",
+      "*.ts",
+      "*.json",
+      "src/db/schema.ts",
+      "drizzle.config.ts",
+      "vite.config.ts",
+      "tsconfig.json",
+      "package.json"
+    ]
+  },
+  "then": {
+    "type": "askAgent",
+    "prompt": "Source files have been modified. Please review the changes and update the documentation accordingly. If a /docs folder exists, update relevant documentation there. Otherwise, update the README.md file to reflect any new features, API changes, configuration updates, or architectural modifications. Ensure the documentation accurately describes the current state of the codebase."
+  }
+}

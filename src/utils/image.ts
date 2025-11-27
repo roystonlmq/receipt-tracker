@@ -110,10 +110,10 @@ export interface ExifData {
 /**
  * Extract EXIF metadata from image file
  * Note: This is a placeholder. For production, use a library like exif-js
- * @param file The image file
+ * @param _file The image file
  * @returns EXIF data or null
  */
-export async function extractExifData(file: File): Promise<ExifData | null> {
+export async function extractExifData(_file: File): Promise<ExifData | null> {
 	// Placeholder implementation
 	// In production, use a library like exif-js to extract actual EXIF data
 	return {

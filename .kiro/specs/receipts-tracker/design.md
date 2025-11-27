@@ -201,8 +201,9 @@ const getScreenshots = createServerFn({ method: 'GET' })
   .validator((params: GetScreenshotsInput) => params)
   .handler(async ({ data, context }) => {
     // Validate user authentication
-    // Query screenshots by userId and optional date filter
-    // Return screenshots with metadata
+    // Use raw PostgreSQL client for reliable query execution
+    // Build dynamic SQL query based on filters (folderDate, searchQuery)
+    // Return screenshots with metadata ordered by upload date
   })
 ```
 
@@ -236,7 +237,7 @@ const updateScreenshotNotes = createServerFn({ method: 'POST' })
   .validator((data: UpdateNotesInput) => data)
   .handler(async ({ data, context }) => {
     // Validate user authentication and ownership
-    // Update notes in database
+    // Update notes in database using raw PostgreSQL client
     // Return updated screenshot
   })
 ```
@@ -378,19 +379,31 @@ export interface ParsedFilename {
 export function parseFilename(filename: string): ParsedFilename {
   // Parse "DDMMYY - HHMM - screenshot name.png" format
   // Return parsed components or indicate invalid format
+  // Validates date (DD: 1-31, MM: 1-12) and time (HH: 0-23, MM: 0-59)
 }
 
-export function generateFilename(name: string = 'screenshot'): string {
-  // Generate "DDMMYY - HHMM - {name}.png" using current timestamp
+export function generateFilename(): string {
+  // Generate "DDMMYY - HHMM - screenshot.png" using current timestamp
+  // Always uses "screenshot" as the name (no custom name parameter)
+}
+
+export function generateUniqueFilename(
+  baseFilename: string,
+  existingFilenames: string[]
+): string {
+  // Generate unique filename by checking for duplicates
+  // If baseFilename exists, appends incrementing counter: screenshot_2.png, screenshot_3.png, etc.
+  // Returns baseFilename if no duplicate exists
 }
 
 export function formatFolderDate(ddmmyy: string): string {
-  // Format DDMMYY for display (can return as-is or add separators)
-  // e.g., "271124" -> "27/11/24" or keep as "271124"
+  // Format DDMMYY for display with separators
+  // e.g., "271124" -> "27/11/24"
 }
 
 export function extractFolderDate(filename: string): string {
   // Extract DDMMYY from filename or use current date
+  // Falls back to current date if filename doesn't follow standard format
 }
 ```
 
@@ -905,6 +918,24 @@ For the initial implementation, images will be stored as base64-encoded strings 
 - PostgreSQL can handle large text fields efficiently
 - For production scale, consider migrating to Cloudflare R2 or similar object storage
 - Store thumbnails separately to optimize loading performance
+
+### Database Client Strategy
+
+The application uses a hybrid approach for database operations:
+
+**Raw PostgreSQL Client (`pg`)**: Used for all runtime operations in Cloudflare Workers environment where Drizzle ORM may have compatibility issues:
+- `uploadScreenshot`: Direct INSERT with raw SQL for reliable image data storage
+- `getScreenshots`: Direct SELECT with dynamic query building for filtering and search
+- `updateScreenshotNotes`: Direct UPDATE with raw SQL for notes persistence
+- `renameScreenshot`: Direct UPDATE with ownership validation
+- `deleteScreenshot`: DELETE operations with ownership validation
+- `batchDeleteScreenshots`: Multiple DELETE operations with ownership checks
+- `batchMoveScreenshots`: Multiple UPDATE operations with ownership checks
+- `downloadScreenshotWithNotes`: Direct SELECT with ownership validation for download operations
+
+**Drizzle ORM**: Used exclusively for schema definition and migrations, providing type safety at the schema level without runtime compatibility issues.
+
+This approach ensures maximum reliability in the Cloudflare Workers environment while maintaining type safety through TypeScript interfaces and schema definitions.
 
 ### Authentication
 

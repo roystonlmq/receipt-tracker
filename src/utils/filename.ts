@@ -32,7 +32,6 @@ export function parseFilename(filename: string): ParsedFilename {
 	// Validate date components
 	const day = Number.parseInt(date.substring(0, 2), 10);
 	const month = Number.parseInt(date.substring(2, 4), 10);
-	const year = Number.parseInt(date.substring(4, 6), 10);
 
 	if (day < 1 || day > 31 || month < 1 || month > 12) {
 		return {
@@ -65,11 +64,10 @@ export function parseFilename(filename: string): ParsedFilename {
 }
 
 /**
- * Generate filename with current timestamp in "DDMMYY - HHMM - name.png" format
- * @param name The name part of the filename (default: "screenshot")
- * @returns Generated filename
+ * Generate filename with current timestamp in "DDMMYY - HHMM - screenshot.png" format
+ * @returns Generated filename (always uses "screenshot" as the name)
  */
-export function generateFilename(name = "screenshot"): string {
+export function generateFilename(): string {
 	const now = new Date();
 
 	const day = now.getDate().toString().padStart(2, "0");
@@ -79,7 +77,40 @@ export function generateFilename(name = "screenshot"): string {
 	const hour = now.getHours().toString().padStart(2, "0");
 	const minute = now.getMinutes().toString().padStart(2, "0");
 
-	return `${day}${month}${year} - ${hour}${minute} - ${name}.png`;
+	return `${day}${month}${year} - ${hour}${minute} - screenshot.png`;
+}
+
+/**
+ * Generate unique filename by checking for duplicates and incrementing
+ * @param baseFilename The base filename (e.g., "271124 - 1430 - screenshot.png")
+ * @param existingFilenames Array of existing filenames to check against
+ * @returns Unique filename with increment if needed (e.g., "271124 - 1430 - screenshot_2.png")
+ */
+export function generateUniqueFilename(
+	baseFilename: string,
+	existingFilenames: string[]
+): string {
+	// If base filename doesn't exist, return it
+	if (!existingFilenames.includes(baseFilename)) {
+		return baseFilename;
+	}
+
+	// Parse the base filename to get components
+	const parsed = parseFilename(baseFilename);
+	if (!parsed.isValid) {
+		return baseFilename;
+	}
+
+	// Find the next available number
+	let counter = 2;
+	let uniqueFilename: string;
+
+	do {
+		uniqueFilename = `${parsed.date} - ${parsed.time} - screenshot_${counter}.png`;
+		counter++;
+	} while (existingFilenames.includes(uniqueFilename));
+
+	return uniqueFilename;
 }
 
 /**

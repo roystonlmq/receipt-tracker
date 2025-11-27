@@ -59,3 +59,14 @@ export interface BatchDeleteInput {
 	ids: number[];
 	userId: number;
 }
+
+export interface BatchMoveInput {
+	ids: number[];
+	userId: number;
+	targetFolderDate: string; // DDMMYY format
+}
+
+export interface DownloadInput {
+	id: number;
+	userId: number;
+}

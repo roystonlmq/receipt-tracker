@@ -48,7 +48,12 @@
 
   - **Validates: Requirements 6.5**
 
-- [ ] 3. Implement image validation and processing utilities
+- [x] 3. Implement image validation and processing utilities
+
+
+
+
+
   - Create validateImageFile function to check file type and size
   - Create generateThumbnail function for optimized thumbnails
   - Create extractExifData function for metadata extraction (optional)
@@ -62,6 +67,7 @@
 - [x] 4. Create screenshot upload server function
 
 
+
   - Implement uploadScreenshot server function with validation
   - Handle file data encoding and storage
   - Extract or generate filename with proper format
@@ -73,7 +79,10 @@
   - **Property 25: Upload timestamp recording**
   - **Validates: Requirements 9.1**
 
-- [ ] 5. Create screenshot query server functions
+- [x] 5. Create screenshot query server functions
+
+
+
   - Implement getScreenshots server function with user filtering
   - Support optional folderDate parameter for folder-specific queries
   - Support optional searchQuery parameter for filtering by name
@@ -96,7 +105,12 @@
   - **Property 28: Multi-criteria sorting**
   - **Validates: Requirements 9.5**
 
-- [ ] 6. Create screenshot modification server functions
+
+
+- [x] 6. Create screenshot modification server functions
+
+
+
   - Implement renameScreenshot server function with ownership validation
   - Implement updateScreenshotNotes server function
   - Implement deleteScreenshot server function with cascade deletion
@@ -125,9 +139,14 @@
 
 - [ ]* 6.6 Write property test for notes persistence
   - **Property 35: Notes persistence**
+
+
+
   - **Validates: Requirements 14.2**
 
-- [ ] 7. Create batch operation server functions
+- [x] 7. Create batch operation server functions
+
+
   - Implement batchDeleteScreenshots server function
   - Implement batchMoveScreenshots server function (if needed)
   - Return count of affected screenshots
@@ -137,11 +156,15 @@
   - **Property 30: Batch delete completeness**
   - **Validates: Requirements 10.4**
 
+
 - [ ]* 7.2 Write property test for batch operation count accuracy
   - **Property 31: Batch operation count accuracy**
   - **Validates: Requirements 10.5**
 
-- [ ] 8. Implement download with notes functionality
+- [x] 8. Implement download with notes functionality
+
+
+
   - Create downloadScreenshotWithNotes server function
   - Generate notes.txt file with proper naming format
   - Bundle image and notes file for download
@@ -216,15 +239,22 @@
 
 - [ ]* 11.1 Write property test for automatic folder assignment
   - **Property 15: Automatic folder assignment**
+
+
+
   - **Validates: Requirements 5.2, 6.2**
 
 - [ ]* 11.2 Write property test for consistent folder assignment
   - **Property 20: Consistent folder assignment for same date**
   - **Validates: Requirements 6.4**
 
-- [ ] 12. Create ScreenshotViewer component
+- [x] 12. Create ScreenshotViewer component
+
+
   - Display full-resolution image
   - Show and edit notes with save functionality
+
+
   - Provide download button for image + notes
   - Navigate to previous/next screenshot
   - Close on ESC key or close button
@@ -234,10 +264,17 @@
   - **Property 26: Metadata display completeness**
   - **Validates: Requirements 9.3**
 
-- [ ] 13. Create SearchBar component
+- [x] 13. Create SearchBar component
+
+
+
+
   - Implement debounced search input
   - Display search results with folder indication
   - Show results count
+
+
+
   - Provide clear search functionality
   - _Requirements: 11.1, 11.2, 11.3, 11.4, 11.5_
 
@@ -245,13 +282,17 @@
   - **Property 34: Search result folder indication**
   - **Validates: Requirements 11.4**
 
-- [ ] 14. Create ConfirmDialog component
+- [x] 14. Create ConfirmDialog component
+
+
   - Reusable confirmation dialog for delete operations
   - Support custom title, message, and button text
   - Handle confirm and cancel actions
   - _Requirements: 4.1_
 
+
 - [ ] 15. Implement error handling and validation
+
   - Create ErrorBoundary component for React errors
   - Add validation error display for forms
   - Implement toast notifications for operations
@@ -287,6 +328,9 @@
 
 - [ ]* 16.2 Write property test for UI consistency after rename
   - **Property 11: UI consistency after rename**
+
+
+
   - **Validates: Requirements 3.6**
 
 - [ ]* 16.3 Write property test for UI consistency after deletion
@@ -304,14 +348,22 @@
   - Implement hover states and visual feedback for interactions
   - _Requirements: 15.1, 15.2, 15.3, 15.4, 15.5_
 
-- [ ] 18. Checkpoint - Ensure all tests pass
+- [x] 18. Checkpoint - Ensure all tests pass
+
+
+
   - Ensure all tests pass, ask the user if questions arise.
 
-- [ ] 19. Create demo data and test user flow
+- [x] 19. Create demo data and test user flow
+
+
   - Create seed script with sample screenshots
   - Test complete user workflows end-to-end
   - Verify all features work as expected
   - _Requirements: All_
 
-- [ ] 20. Final checkpoint - Ensure all tests pass
+- [x] 20. Final checkpoint - Ensure all tests pass
+
+
+
   - Ensure all tests pass, ask the user if questions arise.

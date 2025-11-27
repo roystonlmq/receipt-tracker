@@ -3,15 +3,20 @@ import { Upload, X } from "lucide-react";
 import type { Screenshot } from "@/types/screenshot";
 import { uploadScreenshot } from "@/server/screenshots";
 import { validateImageFile } from "@/utils/image";
+import { retryWithBackoff, isRetryableError } from "@/utils/retry";
 
 interface ScreenshotUploadProps {
 	userId: number;
 	onUploadComplete: (screenshots: Screenshot[]) => void;
+	onError?: (message: string) => void;
+	onSuccess?: (message: string) => void;
 }
 
 export function ScreenshotUpload({
 	userId,
 	onUploadComplete,
+	onError,
+	onSuccess,
 }: ScreenshotUploadProps) {
 	const [isDragging, setIsDragging] = useState(false);
 	const [uploading, setUploading] = useState(false);
@@ -112,7 +117,22 @@ export function ScreenshotUpload({
 					console.log("userId:", payload.userId);
 					console.log("file.name:", payload.file.name);
 
-					const result = await uploadScreenshot({ data: payload });
+					// Retry upload with exponential backoff for retryable errors
+					const result = await retryWithBackoff(
+						async () => {
+							try {
+								return await uploadScreenshot({ data: payload });
+							} catch (err) {
+								// Only retry if error is retryable
+								if (isRetryableError(err)) {
+									throw err;
+								}
+								// For non-retryable errors, throw immediately
+								throw err;
+							}
+						},
+						{ maxAttempts: 3, initialDelay: 1000 },
+					);
 
 					// Update progress
 					setUploadProgress((prev) =>
@@ -122,7 +142,9 @@ export function ScreenshotUpload({
 					return result.screenshot;
 				} catch (err) {
 					console.error(`Failed to upload ${file.name}:`, err);
-					setError(`Failed to upload ${file.name}`);
+					const errorMessage = `Failed to upload ${file.name}`;
+					setError(errorMessage);
+					onError?.(errorMessage);
 					return null;
 				}
 			});
@@ -134,9 +156,21 @@ export function ScreenshotUpload({
 
 			if (successfulUploads.length > 0) {
 				onUploadComplete(successfulUploads);
+				const message = `Successfully uploaded ${successfulUploads.length} screenshot${successfulUploads.length > 1 ? "s" : ""}`;
+				onSuccess?.(message);
+			}
+
+			// Show error if some uploads failed
+			if (successfulUploads.length < validFiles.length) {
+				const failedCount = validFiles.length - successfulUploads.length;
+				const errorMessage = `${failedCount} upload${failedCount > 1 ? "s" : ""} failed`;
+				setError(errorMessage);
+				onError?.(errorMessage);
 			}
 		} catch (err) {
-			setError("Upload failed. Please try again.");
+			const errorMessage = "Upload failed. Please try again.";
+			setError(errorMessage);
+			onError?.(errorMessage);
 		} finally {
 			setUploading(false);
 			setUploadProgress([]);

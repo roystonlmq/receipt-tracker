@@ -1,10 +1,10 @@
 import { createServerFn } from "@tanstack/react-start";
-import { and, desc, eq, like, sql } from "drizzle-orm";
 import { Client } from "pg";
-import { db } from "@/db";
-import { screenshots } from "@/db/schema";
 import type {
+	BatchDeleteInput,
+	BatchMoveInput,
 	DeleteScreenshotInput,
+	DownloadInput,
 	GetScreenshotsInput,
 	RenameScreenshotInput,
 	UpdateNotesInput,
@@ -54,17 +54,34 @@ export const uploadScreenshot = createServerFn({ method: "POST" })
 			if (customFilename) {
 				filename = customFilename;
 			} else {
-				// Check if original filename follows the standard format
-				const parsed = parseFilename(originalFilename);
-				if (parsed.isValid) {
-					filename = originalFilename;
-				} else {
-					// Generate new filename with current timestamp
-					const nameWithoutExt = originalFilename.replace(
-						/\.(png|jpg|jpeg)$/i,
-						"",
+				// Always generate new filename with "screenshot" as the name
+				const baseFilename = generateFilename();
+				
+				// Check for duplicates and generate unique filename if needed
+				const client = new Client({
+					connectionString: process.env.DATABASE_URL!,
+				});
+				
+				try {
+					await client.connect();
+					
+					// Get existing filenames for this user with the same date/time prefix
+					const parsed = parseFilename(baseFilename);
+					const dateTimePrefix = `${parsed.date} - ${parsed.time}`;
+					
+					const result = await client.query(
+						`SELECT filename FROM screenshots 
+						 WHERE user_id = $1 AND filename LIKE $2`,
+						[userId, `${dateTimePrefix}%`]
 					);
-					filename = generateFilename(nameWithoutExt || "screenshot");
+					
+					const existingFilenames = result.rows.map(row => row.filename);
+					
+					// Generate unique filename
+					const { generateUniqueFilename } = await import("@/utils/filename");
+					filename = generateUniqueFilename(baseFilename, existingFilenames);
+				} finally {
+					await client.end();
 				}
 			}
 
@@ -154,25 +171,46 @@ export const getScreenshots = createServerFn({ method: "GET" })
 		try {
 			const { userId, folderDate, searchQuery } = data;
 
-			// Build query conditions
-			const conditions = [eq(screenshots.userId, userId)];
-
-			if (folderDate) {
-				conditions.push(eq(screenshots.folderDate, folderDate));
+			// Use raw pg client to bypass Drizzle ORM issues in Workers
+			const client = new Client({
+				connectionString: process.env.DATABASE_URL!,
+			});
+			
+			try {
+				await client.connect();
+				
+				// Build query dynamically based on filters
+				let query = `
+					SELECT id, user_id as "userId", filename, original_filename as "originalFilename", 
+					       image_data as "imageData", mime_type as "mimeType", file_size as "fileSize",
+					       capture_date as "captureDate", upload_date as "uploadDate", notes, 
+					       folder_date as "folderDate", created_at as "createdAt", updated_at as "updatedAt"
+					FROM screenshots 
+					WHERE user_id = $1
+				`;
+				
+				const params: any[] = [userId];
+				let paramIndex = 2;
+				
+				if (folderDate) {
+					query += ` AND folder_date = $${paramIndex}`;
+					params.push(folderDate);
+					paramIndex++;
+				}
+				
+				if (searchQuery) {
+					query += ` AND filename ILIKE $${paramIndex}`;
+					params.push(`%${searchQuery}%`);
+					paramIndex++;
+				}
+				
+				query += ` ORDER BY upload_date DESC`;
+				
+				const result = await client.query(query, params);
+				return result.rows;
+			} finally {
+				await client.end();
 			}
-
-			if (searchQuery) {
-				conditions.push(like(screenshots.filename, `%${searchQuery}%`));
-			}
-
-			// Query screenshots
-			const results = await db
-				.select()
-				.from(screenshots)
-				.where(and(...conditions))
-				.orderBy(desc(screenshots.uploadDate));
-
-			return results;
 		} catch (error) {
 			console.error("Failed to get screenshots:", error);
 			throw new Error("Failed to retrieve screenshots. Please try again.");
@@ -193,28 +231,41 @@ export const renameScreenshot = createServerFn({ method: "POST" })
 		try {
 			const { id, userId, newFilename } = data;
 
-			// Verify ownership
-			const [existing] = await db
-				.select()
-				.from(screenshots)
-				.where(and(eq(screenshots.id, id), eq(screenshots.userId, userId)))
-				.limit(1);
+			// Use raw pg client to bypass Drizzle ORM issues in Workers
+			const client = new Client({
+				connectionString: process.env.DATABASE_URL!,
+			});
+			
+			try {
+				await client.connect();
+				
+				// Verify ownership
+				const checkResult = await client.query(
+					`SELECT id FROM screenshots WHERE id = $1 AND user_id = $2`,
+					[id, userId]
+				);
 
-			if (!existing) {
-				throw new Error("Screenshot not found or access denied");
+				if (checkResult.rows.length === 0) {
+					throw new Error("Screenshot not found or access denied");
+				}
+
+				// Update filename and updatedAt, preserve other timestamps
+				const result = await client.query(
+					`UPDATE screenshots 
+					 SET filename = $1, updated_at = NOW()
+					 WHERE id = $2
+					 RETURNING id, user_id as "userId", filename, original_filename as "originalFilename", 
+					           image_data as "imageData", mime_type as "mimeType", file_size as "fileSize",
+					           capture_date as "captureDate", upload_date as "uploadDate", notes, folder_date as "folderDate",
+					           created_at as "createdAt", updated_at as "updatedAt"`,
+					[newFilename, id]
+				);
+
+				const updated = result.rows[0];
+				return { success: true, screenshot: updated };
+			} finally {
+				await client.end();
 			}
-
-			// Update filename and updatedAt, preserve other timestamps
-			const [updated] = await db
-				.update(screenshots)
-				.set({
-					filename: newFilename,
-					updatedAt: new Date(),
-				})
-				.where(eq(screenshots.id, id))
-				.returning();
-
-			return { success: true, screenshot: updated };
 		} catch (error) {
 			console.error("Rename failed:", error);
 			throw new Error("Failed to rename screenshot. Please try again.");
@@ -235,17 +286,28 @@ export const deleteScreenshot = createServerFn({ method: "POST" })
 		try {
 			const { id, userId } = data;
 
-			// Verify ownership and delete
-			const result = await db
-				.delete(screenshots)
-				.where(and(eq(screenshots.id, id), eq(screenshots.userId, userId)))
-				.returning();
+			// Use raw pg client to bypass Drizzle ORM issues in Workers
+			const client = new Client({
+				connectionString: process.env.DATABASE_URL!,
+			});
+			
+			try {
+				await client.connect();
+				
+				// Verify ownership and delete
+				const result = await client.query(
+					`DELETE FROM screenshots WHERE id = $1 AND user_id = $2 RETURNING id`,
+					[id, userId]
+				);
 
-			if (result.length === 0) {
-				throw new Error("Screenshot not found or access denied");
+				if (result.rows.length === 0) {
+					throw new Error("Screenshot not found or access denied");
+				}
+
+				return { success: true };
+			} finally {
+				await client.end();
 			}
-
-			return { success: true };
 		} catch (error) {
 			console.error("Delete failed:", error);
 			throw new Error("Failed to delete screenshot. Please try again.");
@@ -266,30 +328,226 @@ export const updateScreenshotNotes = createServerFn({ method: "POST" })
 		try {
 			const { id, userId, notes } = data;
 
-			// Verify ownership
-			const [existing] = await db
-				.select()
-				.from(screenshots)
-				.where(and(eq(screenshots.id, id), eq(screenshots.userId, userId)))
-				.limit(1);
+			// Use raw pg client to bypass Drizzle ORM issues in Workers
+			const client = new Client({
+				connectionString: process.env.DATABASE_URL!,
+			});
+			
+			try {
+				await client.connect();
+				
+				// Verify ownership
+				const checkResult = await client.query(
+					`SELECT id FROM screenshots WHERE id = $1 AND user_id = $2`,
+					[id, userId]
+				);
 
-			if (!existing) {
-				throw new Error("Screenshot not found or access denied");
+				if (checkResult.rows.length === 0) {
+					throw new Error("Screenshot not found or access denied");
+				}
+
+				// Update notes
+				const result = await client.query(
+					`UPDATE screenshots 
+					 SET notes = $1, updated_at = NOW()
+					 WHERE id = $2
+					 RETURNING id, user_id as "userId", filename, original_filename as "originalFilename", 
+					           image_data as "imageData", mime_type as "mimeType", file_size as "fileSize",
+					           capture_date as "captureDate", upload_date as "uploadDate", notes, folder_date as "folderDate",
+					           created_at as "createdAt", updated_at as "updatedAt"`,
+					[notes, id]
+				);
+
+				const updated = result.rows[0];
+				return { success: true, screenshot: updated };
+			} finally {
+				await client.end();
 			}
-
-			// Update notes
-			const [updated] = await db
-				.update(screenshots)
-				.set({
-					notes,
-					updatedAt: new Date(),
-				})
-				.where(eq(screenshots.id, id))
-				.returning();
-
-			return { success: true, screenshot: updated };
 		} catch (error) {
 			console.error("Update notes failed:", error);
 			throw new Error("Failed to update notes. Please try again.");
+		}
+	});
+
+/**
+ * Batch delete multiple screenshots
+ */
+export const batchDeleteScreenshots = createServerFn({ method: "POST" })
+	.inputValidator((input: BatchDeleteInput) => input)
+	.handler(async ({ data }) => {
+		// Validation
+		if (!data.userId) {
+			throw new Error("User ID is required");
+		}
+		if (!data.ids || data.ids.length === 0) {
+			throw new Error("At least one screenshot ID is required");
+		}
+
+		try {
+			const { ids, userId } = data;
+
+			// Use raw pg client to bypass Drizzle ORM issues in Workers
+			const client = new Client({
+				connectionString: process.env.DATABASE_URL!,
+			});
+			
+			try {
+				await client.connect();
+				
+				// Delete each screenshot individually to ensure proper ownership verification
+				let deletedCount = 0;
+				for (const id of ids) {
+					const deleteResult = await client.query(
+						`DELETE FROM screenshots WHERE id = $1 AND user_id = $2 RETURNING id`,
+						[id, userId]
+					);
+
+					if (deleteResult.rows.length > 0) {
+						deletedCount++;
+					}
+				}
+
+				return { success: true, count: deletedCount };
+			} finally {
+				await client.end();
+			}
+		} catch (error) {
+			console.error("Batch delete failed:", error);
+			throw new Error("Failed to delete screenshots. Please try again.");
+		}
+	});
+
+/**
+ * Batch move multiple screenshots to a different folder
+ */
+export const batchMoveScreenshots = createServerFn({ method: "POST" })
+	.inputValidator((input: BatchMoveInput) => input)
+	.handler(async ({ data }) => {
+		// Validation
+		if (!data.userId) {
+			throw new Error("User ID is required");
+		}
+		if (!data.ids || data.ids.length === 0) {
+			throw new Error("At least one screenshot ID is required");
+		}
+		if (!data.targetFolderDate) {
+			throw new Error("Target folder date is required");
+		}
+
+		try {
+			const { ids, userId, targetFolderDate } = data;
+
+			// Validate folder date format (DDMMYY)
+			if (!/^\d{6}$/.test(targetFolderDate)) {
+				throw new Error("Invalid folder date format. Expected DDMMYY");
+			}
+
+			// Use raw pg client to bypass Drizzle ORM issues in Workers
+			const client = new Client({
+				connectionString: process.env.DATABASE_URL!,
+			});
+			
+			try {
+				await client.connect();
+				
+				// Move each screenshot individually to ensure proper ownership verification
+				let movedCount = 0;
+				for (const id of ids) {
+					// Verify ownership first
+					const checkResult = await client.query(
+						`SELECT id FROM screenshots WHERE id = $1 AND user_id = $2`,
+						[id, userId]
+					);
+
+					if (checkResult.rows.length > 0) {
+						// Update the folder date
+						await client.query(
+							`UPDATE screenshots SET folder_date = $1, updated_at = NOW() WHERE id = $2`,
+							[targetFolderDate, id]
+						);
+
+						movedCount++;
+					}
+				}
+
+				return { success: true, count: movedCount };
+			} finally {
+				await client.end();
+			}
+		} catch (error) {
+			console.error("Batch move failed:", error);
+			throw new Error("Failed to move screenshots. Please try again.");
+		}
+	});
+
+/**
+ * Download a screenshot with its notes as a bundled file
+ */
+export const downloadScreenshotWithNotes = createServerFn({ method: "GET" })
+	.inputValidator((input: DownloadInput) => input)
+	.handler(async ({ data }) => {
+		// Validation
+		if (!data.id || !data.userId) {
+			throw new Error("ID and user ID are required");
+		}
+
+		try {
+			const { id, userId } = data;
+
+			// Use raw pg client to bypass Drizzle ORM issues in Workers
+			const client = new Client({
+				connectionString: process.env.DATABASE_URL!,
+			});
+			
+			try {
+				await client.connect();
+				
+				// Verify ownership and retrieve screenshot
+				const result = await client.query(
+					`SELECT id, user_id as "userId", filename, original_filename as "originalFilename", 
+					        image_data as "imageData", mime_type as "mimeType", file_size as "fileSize",
+					        capture_date as "captureDate", upload_date as "uploadDate", notes, 
+					        folder_date as "folderDate", created_at as "createdAt", updated_at as "updatedAt"
+					 FROM screenshots WHERE id = $1 AND user_id = $2`,
+					[id, userId]
+				);
+
+				if (result.rows.length === 0) {
+					throw new Error("Screenshot not found or access denied");
+				}
+
+				const screenshot = result.rows[0];
+
+				// Parse filename to extract components for notes filename
+				const parsed = parseFilename(screenshot.filename);
+				let notesFilename: string;
+
+				if (parsed.isValid) {
+					// Use the parsed date and time for notes filename
+					notesFilename = `${parsed.date} - ${parsed.time} - ${parsed.name}_note.txt`;
+				} else {
+					// Fallback: use the original filename with _note.txt suffix
+					const nameWithoutExt = screenshot.filename.replace(/\.(png|jpg|jpeg)$/i, "");
+					notesFilename = `${nameWithoutExt}_note.txt`;
+				}
+
+				// Return the screenshot data and notes filename
+				return {
+					success: true,
+					screenshot: {
+						id: screenshot.id,
+						filename: screenshot.filename,
+						imageData: screenshot.imageData,
+						mimeType: screenshot.mimeType,
+						notes: screenshot.notes || "",
+						notesFilename,
+					},
+				};
+			} finally {
+				await client.end();
+			}
+		} catch (error) {
+			console.error("Download with notes failed:", error);
+			throw new Error("Failed to download screenshot. Please try again.");
 		}
 	});

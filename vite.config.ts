@@ -6,18 +6,36 @@ import viteTsConfigPaths from 'vite-tsconfig-paths'
 import tailwindcss from '@tailwindcss/vite'
 import { cloudflare } from '@cloudflare/vite-plugin'
 
-const config = defineConfig({
-  plugins: [
-    devtools(),
-    cloudflare({ viteEnvironment: { name: 'ssr' } }),
-    // this is the plugin that enables path aliases
-    viteTsConfigPaths({
-      projects: ['./tsconfig.json'],
-    }),
-    tailwindcss(),
-    tanstackStart(),
-    viteReact(),
-  ],
-})
+const config = defineConfig(({ mode }) => ({
+  plugins:
+    mode === 'test'
+      ? [
+          viteTsConfigPaths({
+            projects: ['./tsconfig.json'],
+          }),
+          viteReact(),
+        ]
+      : [
+          devtools(),
+          cloudflare({ viteEnvironment: { name: 'ssr' } }),
+          viteTsConfigPaths({
+            projects: ['./tsconfig.json'],
+          }),
+          tailwindcss(),
+          tanstackStart(),
+          viteReact(),
+        ],
+  test: {
+    environment: 'jsdom',
+    globals: true,
+    setupFiles: ['./src/test/setup.ts'],
+    pool: 'forks',
+    poolOptions: {
+      forks: {
+        singleFork: true,
+      },
+    },
+  },
+}))
 
 export default config

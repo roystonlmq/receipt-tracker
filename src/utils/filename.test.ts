@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
 	parseFilename,
 	generateFilename,
+	generateUniqueFilename,
 	extractFolderDate,
 	formatFolderDate,
 } from "./filename";
@@ -68,25 +69,68 @@ describe("parseFilename", () => {
 });
 
 describe("generateFilename", () => {
-	it("should generate filename with default name", () => {
+	it("should generate filename with screenshot as name", () => {
 		const filename = generateFilename();
 		expect(filename).toMatch(/^\d{6} - \d{4} - screenshot\.png$/);
 	});
 
-	it("should generate filename with custom name", () => {
-		const filename = generateFilename("my-receipt");
-		expect(filename).toMatch(/^\d{6} - \d{4} - my-receipt\.png$/);
-	});
-
 	it("should use current timestamp", () => {
 		const now = new Date();
-		const filename = generateFilename("test");
+		const filename = generateFilename();
 
 		const day = now.getDate().toString().padStart(2, "0");
 		const month = (now.getMonth() + 1).toString().padStart(2, "0");
 		const year = now.getFullYear().toString().substring(2);
 
 		expect(filename).toContain(`${day}${month}${year}`);
+	});
+});
+
+describe("generateUniqueFilename", () => {
+	it("should return base filename if no duplicates exist", () => {
+		const baseFilename = "271124 - 1430 - screenshot.png";
+		const existingFilenames: string[] = [];
+
+		const result = generateUniqueFilename(baseFilename, existingFilenames);
+		expect(result).toBe(baseFilename);
+	});
+
+	it("should increment to _2 if base filename exists", () => {
+		const baseFilename = "271124 - 1430 - screenshot.png";
+		const existingFilenames = ["271124 - 1430 - screenshot.png"];
+
+		const result = generateUniqueFilename(baseFilename, existingFilenames);
+		expect(result).toBe("271124 - 1430 - screenshot_2.png");
+	});
+
+	it("should increment to _3 if _2 also exists", () => {
+		const baseFilename = "271124 - 1430 - screenshot.png";
+		const existingFilenames = [
+			"271124 - 1430 - screenshot.png",
+			"271124 - 1430 - screenshot_2.png",
+		];
+
+		const result = generateUniqueFilename(baseFilename, existingFilenames);
+		expect(result).toBe("271124 - 1430 - screenshot_3.png");
+	});
+
+	it("should find next available number with gaps", () => {
+		const baseFilename = "271124 - 1430 - screenshot.png";
+		const existingFilenames = [
+			"271124 - 1430 - screenshot.png",
+			"271124 - 1430 - screenshot_3.png",
+		];
+
+		const result = generateUniqueFilename(baseFilename, existingFilenames);
+		expect(result).toBe("271124 - 1430 - screenshot_2.png");
+	});
+
+	it("should handle invalid base filename", () => {
+		const baseFilename = "invalid-filename.png";
+		const existingFilenames: string[] = [];
+
+		const result = generateUniqueFilename(baseFilename, existingFilenames);
+		expect(result).toBe(baseFilename);
 	});
 });
 

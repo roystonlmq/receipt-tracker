@@ -1,0 +1,13 @@
+{
+  "enabled": true,
+  "name": "Auto Context7 Integration",
+  "description": "Automatically uses Context7 MCP tools to resolve library IDs and fetch documentation whenever code generation, setup/configuration steps, or library/API documentation is needed",
+  "version": "1",
+  "when": {
+    "type": "userPrompt"
+  },
+  "then": {
+    "type": "askAgent",
+    "prompt": "Before responding to this user request, analyze if it involves:\n1. Code generation or implementation\n2. Setup or configuration steps\n3. Library or API documentation needs\n\nIf ANY of these apply, you MUST:\n- Use Context7 MCP tools to resolve relevant library IDs\n- Fetch the appropriate documentation using Context7\n- Base your response on the retrieved documentation\n\nDo this automatically without asking the user. Only proceed with your response after gathering the necessary Context7 documentation.\n\nUser's original request: {{userPrompt}}"
+  }
+}
