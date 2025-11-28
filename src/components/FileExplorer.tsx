@@ -822,11 +822,12 @@ export function FileExplorer({
 						{folders.map((folder) => (
 							<div
 								key={folder.date}
-								className={`group relative rounded-lg p-6 transition-all border-2 ${
+								className={`group relative rounded-lg transition-all border-2 cursor-pointer ${
 									selectedFolders.has(folder.date)
 										? "bg-blue-600/20 border-blue-500"
 										: "bg-white/5 hover:bg-white/10 border-white/10 hover:border-white/20"
 								}`}
+								onClick={() => handleFolderClick(folder.date)}
 							>
 								{/* Selection checkbox - top left with higher z-index */}
 								<button
@@ -856,13 +857,9 @@ export function FileExplorer({
 									</div>
 								</button>
 
-								{/* Folder content - clickable area */}
-								<div 
-									className="cursor-pointer"
-									onClick={() => handleFolderClick(folder.date)}
-								>
-									{/* Add top margin to folder icon to avoid checkbox overlap */}
-									<Folder className="w-12 h-12 text-blue-400 mb-3 mt-6 group-hover:scale-110 transition-transform" />
+								{/* Folder content - fills entire card */}
+								<div className="p-6 pt-9">
+									<Folder className="w-12 h-12 text-blue-400 mb-3 group-hover:scale-110 transition-transform" />
 									<p className="text-white font-medium mb-1">
 										{folder.displayDate}
 									</p>

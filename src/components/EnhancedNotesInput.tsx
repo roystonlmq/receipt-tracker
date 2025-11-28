@@ -9,6 +9,7 @@ interface EnhancedNotesInputProps {
 	userId: number;
 	placeholder?: string;
 	className?: string;
+	autoFocus?: boolean;
 }
 
 export function EnhancedNotesInput({
@@ -17,6 +18,7 @@ export function EnhancedNotesInput({
 	userId,
 	placeholder = "Add notes... Use #tags to organize",
 	className = "",
+	autoFocus = false,
 }: EnhancedNotesInputProps) {
 	const [showSuggestions, setShowSuggestions] = useState(false);
 	const [suggestions, setSuggestions] = useState<TagSuggestion[]>([]);
@@ -24,6 +26,13 @@ export function EnhancedNotesInput({
 	const [currentHashtag, setCurrentHashtag] = useState<string | null>(null);
 	const textareaRef = useRef<HTMLTextAreaElement>(null);
 	const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+	// Auto-focus on mount if requested
+	useEffect(() => {
+		if (autoFocus && textareaRef.current) {
+			textareaRef.current.focus();
+		}
+	}, [autoFocus]);
 
 	// Detect # character and fetch suggestions
 	const handleInputChange = useCallback(

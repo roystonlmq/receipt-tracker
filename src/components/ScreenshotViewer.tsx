@@ -31,6 +31,7 @@ export function ScreenshotViewer({
 	const [isSaving, setIsSaving] = useState(false);
 	const [isDownloading, setIsDownloading] = useState(false);
 	const [saveSuccess, setSaveSuccess] = useState(false);
+	const [isEditMode, setIsEditMode] = useState(false);
 	const toast = useToast();
 
 	// Update notes when screenshot changes
@@ -38,19 +39,50 @@ export function ScreenshotViewer({
 		setNotes(screenshot.notes || "");
 	}, [screenshot.id, screenshot.notes]);
 
+	const handleCancelEdit = () => {
+		const hasUnsavedChanges = notes !== (screenshot.notes || "");
+		
+		if (hasUnsavedChanges) {
+			const shouldDiscard = window.confirm(
+				"You have unsaved changes. Do you want to discard them?"
+			);
+			if (!shouldDiscard) {
+				return; // User wants to keep editing
+			}
+		}
+		
+		// Exit edit mode and reset notes
+		setIsEditMode(false);
+		setNotes(screenshot.notes || "");
+	};
+
 	// Handle keyboard shortcuts
 	useEffect(() => {
 		const handleKeyDown = (e: KeyboardEvent) => {
+			// Don't handle shortcuts if user is typing in textarea
+			const isTyping = document.activeElement?.tagName === "TEXTAREA";
+			
 			if (e.key === "Escape") {
-				onClose();
-			} else if (e.key === "ArrowLeft" && onNavigate) {
+				if (isEditMode) {
+					// Exit edit mode with confirmation if there are unsaved changes
+					e.preventDefault();
+					handleCancelEdit();
+				} else {
+					// Close viewer
+					onClose();
+				}
+			} else if (e.key === "ArrowLeft" && onNavigate && !isTyping) {
 				onNavigate("prev");
-			} else if (e.key === "ArrowRight" && onNavigate) {
+			} else if (e.key === "ArrowRight" && onNavigate && !isTyping) {
 				onNavigate("next");
+			} else if (e.key.toLowerCase() === "e" && !isTyping && !e.ctrlKey && !e.metaKey && !isEditMode) {
+				// Press 'E' to enter edit mode
+				e.preventDefault();
+				setIsEditMode(true);
 			} else if ((e.ctrlKey || e.metaKey) && e.key === "s") {
 				// Ctrl+S (Windows/Linux) or Cmd+S (Mac) to save notes
 				e.preventDefault(); // Prevent browser save dialog
-				if (notes !== (screenshot.notes || "")) {
+				if (isEditMode && notes !== (screenshot.notes || "")) {
 					handleSaveNotes();
 				}
 			} else if ((e.ctrlKey || e.metaKey) && e.key === "d") {
@@ -64,7 +96,7 @@ export function ScreenshotViewer({
 
 		window.addEventListener("keydown", handleKeyDown);
 		return () => window.removeEventListener("keydown", handleKeyDown);
-	}, [onClose, onNavigate, notes, screenshot.notes, isDownloading]);
+	}, [onClose, onNavigate, notes, screenshot.notes, isDownloading, isEditMode]);
 
 	// Determine if navigation is available
 	const currentIndex = allScreenshots.findIndex((s) => s.id === screenshot.id);
@@ -89,6 +121,9 @@ export function ScreenshotViewer({
 			setSaveSuccess(true);
 			setTimeout(() => setSaveSuccess(false), 2000);
 			toast.success("Notes saved successfully!");
+			
+			// Exit edit mode after successful save
+			setIsEditMode(false);
 
 			// Optimistically update the parent with the new notes
 			if (onUpdate) {
@@ -321,49 +356,99 @@ export function ScreenshotViewer({
 
 				{/* Notes panel */}
 				<div className="w-96 bg-black/50 border-l border-white/10 flex flex-col">
-					<div className="p-4 border-b border-white/10">
+					<div className="p-4 border-b border-white/10 flex items-center justify-between">
 						<h3 className="text-lg font-semibold text-white">Notes</h3>
+						{!isEditMode && (
+							<button
+								type="button"
+								onClick={() => setIsEditMode(true)}
+								className="flex items-center gap-2 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-sm rounded-lg transition-colors"
+							>
+								Edit
+								<KeyboardHint keys="E" variant="compact" className="opacity-70" />
+							</button>
+						)}
 					</div>
 
 					<div className="flex-1 p-4 flex flex-col overflow-y-auto">
-						{/* Tag hint banner */}
-						<TagHintBanner userId={screenshot.userId} />
+						{!isEditMode ? (
+							/* View mode - display saved notes with clickable hashtags */
+							<>
+								{screenshot.notes && screenshot.notes.trim() ? (
+									<div className="flex-1">
+										<div className="text-sm text-white/90 whitespace-pre-wrap leading-relaxed">
+											{onHashtagClick 
+												? highlightHashtagsClickable(screenshot.notes, handleHashtagClickInternal)
+												: screenshot.notes
+											}
+										</div>
+									</div>
+								) : (
+									<div className="flex-1 flex items-center justify-center">
+										<div className="text-center">
+											<p className="text-white/40 mb-3">No notes yet</p>
+											<button
+												type="button"
+												onClick={() => setIsEditMode(true)}
+												className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors mx-auto"
+											>
+												Add Notes
+												<KeyboardHint keys="E" variant="compact" className="opacity-70" />
+											</button>
+										</div>
+									</div>
+								)}
+								
+								{screenshot.notes && screenshot.notes.trim() && (
+									<div className="text-xs text-white/40 mt-4 pt-4 border-t border-white/10">
+										Press <KeyboardHint keys="E" variant="inline" /> to edit
+									</div>
+								)}
+							</>
+						) : (
+							/* Edit mode - show input with tag hints */
+							<>
+								{/* Tag hint banner */}
+								<TagHintBanner userId={screenshot.userId} />
 
-						{/* Saved notes display with clickable hashtags */}
-						{screenshot.notes && screenshot.notes.trim() && onHashtagClick && (
-							<div className="mb-4 p-3 bg-white/5 border border-white/10 rounded-lg">
-								<div className="text-xs text-white/60 mb-2">Saved notes:</div>
-								<div className="text-sm text-white/90 whitespace-pre-wrap">
-									{highlightHashtagsClickable(screenshot.notes, handleHashtagClickInternal)}
+								{/* Enhanced notes input with hashtag support */}
+								<EnhancedNotesInput
+									value={notes}
+									onChange={setNotes}
+									userId={screenshot.userId}
+									placeholder="Add notes... Use #tags to organize"
+									className="flex-1"
+									autoFocus={true}
+								/>
+
+								<div className="text-xs text-white/40 mt-2 space-y-1">
+									<div>Press <KeyboardHint keys={["Cmd", "S"]} variant="inline" /> to save</div>
+									<div>Press <KeyboardHint keys="Escape" variant="inline" /> to cancel</div>
 								</div>
-							</div>
+							</>
 						)}
+					</div>
 
-						{/* Enhanced notes input with hashtag support */}
-						<EnhancedNotesInput
-							value={notes}
-							onChange={setNotes}
-							userId={screenshot.userId}
-							placeholder="Add notes... Use #tags to organize"
-							className="flex-1"
-						/>
-
-						<div className="text-xs text-white/40 mt-2">
-							Press <KeyboardHint keys={["Cmd", "S"]} variant="inline" /> to save
+					{isEditMode && (
+						<div className="p-4 border-t border-white/10 flex gap-2">
+							<button
+								type="button"
+								onClick={handleCancelEdit}
+								className="flex-1 px-4 py-2 bg-white/5 hover:bg-white/10 text-white rounded-lg transition-colors"
+							>
+								Cancel
+							</button>
+							<button
+								type="button"
+								onClick={handleSaveNotes}
+								disabled={isSaving || notes === (screenshot.notes || "")}
+								className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 disabled:bg-green-600/50 text-white rounded-lg transition-colors"
+							>
+								<Save className="w-4 h-4" />
+								{isSaving ? "Saving..." : saveSuccess ? "Saved!" : "Save"}
+							</button>
 						</div>
-					</div>
-
-					<div className="p-4 border-t border-white/10">
-						<button
-							type="button"
-							onClick={handleSaveNotes}
-							disabled={isSaving || notes === (screenshot.notes || "")}
-							className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 disabled:bg-green-600/50 text-white rounded-lg transition-colors"
-						>
-							<Save className="w-4 h-4" />
-							{isSaving ? "Saving..." : saveSuccess ? "Saved!" : "Save Notes"}
-						</button>
-					</div>
+					)}
 				</div>
 			</div>
 		</div>
