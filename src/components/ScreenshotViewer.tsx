@@ -47,12 +47,18 @@ export function ScreenshotViewer({
 				if (notes !== (screenshot.notes || "")) {
 					handleSaveNotes();
 				}
+			} else if ((e.ctrlKey || e.metaKey) && e.key === "d") {
+				// Ctrl+D (Windows/Linux) or Cmd+D (Mac) to download
+				e.preventDefault(); // Prevent browser bookmark dialog
+				if (!isDownloading) {
+					handleDownload();
+				}
 			}
 		};
 
 		window.addEventListener("keydown", handleKeyDown);
 		return () => window.removeEventListener("keydown", handleKeyDown);
-	}, [onClose, onNavigate, notes, screenshot.notes]);
+	}, [onClose, onNavigate, notes, screenshot.notes, isDownloading]);
 
 	// Determine if navigation is available
 	const currentIndex = allScreenshots.findIndex((s) => s.id === screenshot.id);
@@ -222,6 +228,10 @@ export function ScreenshotViewer({
 				<span className="flex items-center gap-1">
 					<kbd className="px-2 py-1 bg-white/10 rounded text-white/80">ESC</kbd>
 					Close
+				</span>
+				<span className="flex items-center gap-1">
+					<kbd className="px-2 py-1 bg-white/10 rounded text-white/80">Ctrl+D</kbd>
+					Download
 				</span>
 				{hasPrev && (
 					<span className="flex items-center gap-1">
