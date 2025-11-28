@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import { Search, X } from "lucide-react";
+import { Search, X, Hash } from "lucide-react";
+import { KeyboardHint } from "@/components/KeyboardHint";
 
 interface SearchBarProps {
 	onSearch: (query: string) => void;
@@ -56,12 +57,19 @@ export function SearchBar({
 		setQuery(e.target.value);
 	};
 
+	// Detect if query contains hashtags
+	const hasHashtags = query.includes("#");
+
 	return (
 		<div className="w-full space-y-2">
 			{/* Search input */}
 			<div className="relative">
 				<div className="absolute left-4 top-1/2 -translate-y-1/2 pointer-events-none">
-					<Search className="w-5 h-5 text-white/40" />
+					{hasHashtags ? (
+						<Hash className="w-5 h-5 text-blue-400" />
+					) : (
+						<Search className="w-5 h-5 text-white/40" />
+					)}
 				</div>
 
 				<input
@@ -76,7 +84,7 @@ export function SearchBar({
 				{/* Keyboard shortcut hint - only show when not focused and no query */}
 				{!query && (
 					<div className="absolute right-4 top-1/2 -translate-y-1/2 flex items-center gap-1 text-xs text-white/40 pointer-events-none">
-						<kbd className="px-2 py-1 bg-white/10 rounded text-white/60">Ctrl+K</kbd>
+						<KeyboardHint keys={["Cmd", "K"]} variant="compact" />
 						<span>or</span>
 						<kbd className="px-2 py-1 bg-white/10 rounded text-white/60">/</kbd>
 					</div>
@@ -93,6 +101,14 @@ export function SearchBar({
 					</button>
 				)}
 			</div>
+
+			{/* Hashtag hint */}
+			{hasHashtags && (
+				<div className="flex items-center gap-2 text-xs text-blue-400">
+					<Hash className="w-3 h-3" />
+					<span>Searching by tags</span>
+				</div>
+			)}
 
 			{/* Results count */}
 			{query && resultsCount !== undefined && (

@@ -4,6 +4,7 @@ import type { Screenshot } from "@/types/screenshot";
 import { uploadScreenshot } from "@/server/screenshots";
 import { validateImageFile } from "@/utils/image";
 import { retryWithBackoff, isRetryableError } from "@/utils/retry";
+import { KeyboardHint } from "@/components/KeyboardHint";
 
 interface ScreenshotUploadProps {
 	userId: number;
@@ -251,8 +252,10 @@ export function ScreenshotUpload({
 						<p className="text-sm text-white/60">
 							Drag and drop, click to select, or paste from clipboard
 						</p>
-						<p className="text-xs text-white/40 mt-2">
-							PNG, JPG, JPEG up to 10MB • Press Ctrl+V to paste
+						<p className="text-xs text-white/40 mt-2 flex items-center gap-1 justify-center">
+							<span>PNG, JPG, JPEG up to 10MB • Press</span>
+							<KeyboardHint keys={["Cmd", "V"]} variant="inline" />
+							<span>to paste</span>
 						</p>
 					</div>
 				</div>

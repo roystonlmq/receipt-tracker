@@ -5,6 +5,9 @@ import { updateScreenshotNotes, downloadScreenshotWithNotes } from "@/server/scr
 import { downloadFile } from "@/utils/fileSystem";
 import { useToast } from "@/hooks/useToast";
 import { ToastContainer } from "@/components/Toast";
+import { EnhancedNotesInput } from "@/components/EnhancedNotesInput";
+import { TagHintBanner } from "@/components/TagHintBanner";
+import { KeyboardHint } from "@/components/KeyboardHint";
 
 interface ScreenshotViewerProps {
 	screenshot: Screenshot;
@@ -223,30 +226,6 @@ export function ScreenshotViewer({
 		<>
 			<ToastContainer toasts={toast.toasts} onClose={toast.removeToast} />
 			<div className="fixed inset-0 z-50 bg-black/95 flex flex-col" onClick={handleBackdropClick}>
-			{/* Keyboard shortcuts hint - moved to bottom left */}
-			<div className="absolute bottom-4 left-4 bg-black/50 backdrop-blur-sm border border-white/10 rounded-lg px-3 py-2 text-xs text-white/60 flex items-center gap-4">
-				<span className="flex items-center gap-1">
-					<kbd className="px-2 py-1 bg-white/10 rounded text-white/80">ESC</kbd>
-					Close
-				</span>
-				<span className="flex items-center gap-1">
-					<kbd className="px-2 py-1 bg-white/10 rounded text-white/80">Ctrl+D</kbd>
-					Download
-				</span>
-				{hasPrev && (
-					<span className="flex items-center gap-1">
-						<kbd className="px-2 py-1 bg-white/10 rounded text-white/80">←</kbd>
-						Previous
-					</span>
-				)}
-				{hasNext && (
-					<span className="flex items-center gap-1">
-						<kbd className="px-2 py-1 bg-white/10 rounded text-white/80">→</kbd>
-						Next
-					</span>
-				)}
-			</div>
-
 			{/* Header */}
 			<div className="flex items-center justify-between p-4 bg-black/50 border-b border-white/10" onClick={(e) => e.stopPropagation()}>
 				<div className="flex-1 min-w-0">
@@ -260,24 +239,30 @@ export function ScreenshotViewer({
 				</div>
 
 				<div className="flex items-center gap-2 ml-4">
-					{/* Download button */}
+					{/* Download button with keyboard hint */}
 					<button
 						type="button"
 						onClick={handleDownload}
 						disabled={isDownloading}
 						className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-600/50 text-white rounded-lg transition-colors"
+						aria-label={`Download screenshot (${isDownloading ? "downloading" : "Cmd+D or Ctrl+D"})`}
 					>
 						<Download className="w-4 h-4" />
 						{isDownloading ? "Downloading..." : "Download"}
+						{!isDownloading && (
+							<KeyboardHint keys={["Cmd", "D"]} variant="compact" className="ml-1 opacity-70" />
+						)}
 					</button>
 
-					{/* Close button */}
+					{/* Close button with ESC hint */}
 					<button
 						type="button"
 						onClick={onClose}
-						className="p-2 hover:bg-white/10 rounded-lg transition-colors"
+						className="flex items-center gap-2 p-2 hover:bg-white/10 rounded-lg transition-colors group"
+						aria-label="Close viewer (Escape key)"
 					>
 						<X className="w-6 h-6 text-white" />
+						<KeyboardHint keys="Escape" variant="compact" className="opacity-60 group-hover:opacity-100 transition-opacity" />
 					</button>
 				</div>
 			</div>
@@ -286,14 +271,18 @@ export function ScreenshotViewer({
 			<div className="flex-1 flex overflow-hidden">
 				{/* Image viewer */}
 				<div className="flex-1 flex items-center justify-center p-8 relative" onClick={(e) => e.stopPropagation()}>
-					{/* Navigation buttons */}
+					{/* Navigation buttons with keyboard hints */}
 					{hasPrev && onNavigate && (
 						<button
 							type="button"
 							onClick={() => onNavigate("prev")}
-							className="absolute left-4 top-1/2 -translate-y-1/2 p-3 bg-black/50 hover:bg-black/70 rounded-full transition-colors"
+							className="absolute left-4 top-1/2 -translate-y-1/2 p-3 bg-black/50 hover:bg-black/70 rounded-full transition-colors group"
+							aria-label="Previous screenshot (Left arrow key)"
 						>
-							<ChevronLeft className="w-6 h-6 text-white" />
+							<div className="flex items-center gap-2">
+								<KeyboardHint keys="←" variant="compact" className="opacity-60 group-hover:opacity-100 transition-opacity" />
+								<ChevronLeft className="w-6 h-6 text-white" />
+							</div>
 						</button>
 					)}
 
@@ -301,9 +290,13 @@ export function ScreenshotViewer({
 						<button
 							type="button"
 							onClick={() => onNavigate("next")}
-							className="absolute right-4 top-1/2 -translate-y-1/2 p-3 bg-black/50 hover:bg-black/70 rounded-full transition-colors"
+							className="absolute right-4 top-1/2 -translate-y-1/2 p-3 bg-black/50 hover:bg-black/70 rounded-full transition-colors group"
+							aria-label="Next screenshot (Right arrow key)"
 						>
-							<ChevronRight className="w-6 h-6 text-white" />
+							<div className="flex items-center gap-2">
+								<ChevronRight className="w-6 h-6 text-white" />
+								<KeyboardHint keys="→" variant="compact" className="opacity-60 group-hover:opacity-100 transition-opacity" />
+							</div>
 						</button>
 					)}
 
@@ -321,15 +314,21 @@ export function ScreenshotViewer({
 						<h3 className="text-lg font-semibold text-white">Notes</h3>
 					</div>
 
-					<div className="flex-1 p-4 flex flex-col">
-						<textarea
+					<div className="flex-1 p-4 flex flex-col overflow-y-auto">
+						{/* Tag hint banner */}
+						<TagHintBanner userId={screenshot.userId} />
+
+						{/* Enhanced notes input with hashtag support */}
+						<EnhancedNotesInput
 							value={notes}
-							onChange={(e) => setNotes(e.target.value)}
-							placeholder="Add notes about this screenshot..."
-							className="flex-1 w-full bg-white/5 border border-white/10 rounded-lg p-3 text-white placeholder-white/40 resize-none focus:outline-none focus:ring-2 focus:ring-blue-500"
+							onChange={setNotes}
+							userId={screenshot.userId}
+							placeholder="Add notes... Use #tags to organize"
+							className="flex-1"
 						/>
-						<div className="text-xs text-white/40 mt-2 flex items-center gap-1">
-							Press <kbd className="px-2 py-1 bg-white/10 rounded text-white/60">Ctrl+S</kbd> to save
+
+						<div className="text-xs text-white/40 mt-2">
+							Press <KeyboardHint keys={["Cmd", "S"]} variant="inline" /> to save
 						</div>
 					</div>
 

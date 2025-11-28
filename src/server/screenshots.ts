@@ -359,6 +359,25 @@ export const updateScreenshotNotes = createServerFn({ method: "POST" })
 				);
 
 				const updated = result.rows[0];
+				
+				// Extract and store tags synchronously
+				if (notes && notes.trim()) {
+					try {
+						const { extractAndStoreTags } = await import("./tags");
+						await extractAndStoreTags({
+							data: {
+								userId,
+								screenshotId: id,
+								notes,
+							},
+						});
+						console.log("[updateScreenshotNotes] Tags extracted successfully");
+					} catch (error) {
+						console.error("[updateScreenshotNotes] Failed to extract tags:", error);
+						// Don't throw - tag extraction failure shouldn't block notes save
+					}
+				}
+				
 				return { success: true, screenshot: updated };
 			} finally {
 				await client.end();

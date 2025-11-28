@@ -92,19 +92,40 @@ export function FileExplorer({
 	const loadScreenshots = async () => {
 		setLoading(true);
 		try {
-			// Call server function with retry logic
-			const results = await retryWithBackoff(
-				async () => {
-					return await getScreenshots({
-						data: {
-							userId,
-							folderDate: currentFolder || undefined,
-							searchQuery: searchQuery || undefined,
-						},
-					});
-				},
-				{ maxAttempts: 3, initialDelay: 1000 },
-			);
+			let results: Screenshot[];
+
+			// Check if search query contains hashtags
+			const hashtagMatch = searchQuery.match(/#[a-zA-Z0-9_-]+/g);
+
+			if (hashtagMatch && hashtagMatch.length > 0) {
+				// Use tag search
+				const { searchByTags } = await import("@/server/tags");
+				results = await retryWithBackoff(
+					async () => {
+						return await searchByTags({
+							data: {
+								userId,
+								tags: hashtagMatch,
+							},
+						});
+					},
+					{ maxAttempts: 3, initialDelay: 1000 },
+				);
+			} else {
+				// Use regular search
+				results = await retryWithBackoff(
+					async () => {
+						return await getScreenshots({
+							data: {
+								userId,
+								folderDate: currentFolder || undefined,
+								searchQuery: searchQuery || undefined,
+							},
+						});
+					},
+					{ maxAttempts: 3, initialDelay: 1000 },
+				);
+			}
 
 			setScreenshots(results);
 
