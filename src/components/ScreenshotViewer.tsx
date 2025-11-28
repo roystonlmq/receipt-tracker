@@ -1,8 +1,8 @@
 import { useState, useEffect } from "react";
-import { X, ChevronLeft, ChevronRight, Download, Save, FolderOpen } from "lucide-react";
+import { X, ChevronLeft, ChevronRight, Download, Save } from "lucide-react";
 import type { Screenshot } from "@/types/screenshot";
 import { updateScreenshotNotes, downloadScreenshotWithNotes } from "@/server/screenshots";
-import { downloadFile, pickDownloadDirectory, isFileSystemAccessSupported } from "@/utils/fileSystem";
+import { downloadFile } from "@/utils/fileSystem";
 import { useToast } from "@/hooks/useToast";
 import { ToastContainer } from "@/components/Toast";
 
@@ -112,44 +112,6 @@ export function ScreenshotViewer({
 		}
 	};
 
-	const handleChangeDirectory = async () => {
-		try {
-			if (!isFileSystemAccessSupported()) {
-				toast.error(
-					"Your browser doesn't support persistent download directories. Files will download to your default location.",
-					7000,
-				);
-				return;
-			}
-
-			const handle = await pickDownloadDirectory();
-			if (handle) {
-				toast.success("Download directory updated successfully!");
-			}
-		} catch (error) {
-			console.error("Failed to change directory:", error);
-
-			// Handle specific error cases
-			if (error instanceof Error) {
-				if (error.message.includes("not supported")) {
-					toast.error(
-						"Your browser doesn't support this feature. Files will download to your default location.",
-						7000,
-					);
-				} else if (error.name === "SecurityError") {
-					toast.error(
-						"Permission denied. Please allow access to select a download directory.",
-						7000,
-					);
-				} else {
-					toast.error(`Failed to change directory: ${error.message}`, 7000);
-				}
-			} else {
-				toast.error("Failed to change download directory.", 5000);
-			}
-		}
-	};
-
 	const handleDownload = async () => {
 		setIsDownloading(true);
 
@@ -192,14 +154,7 @@ export function ScreenshotViewer({
 
 				// Show success message only if download completed
 				if (imageResult.success) {
-					if (imageResult.usedPersistentDirectory) {
-						toast.success(
-							"Files saved to your selected download directory!",
-							5000,
-						);
-					} else {
-						toast.success("Download started!", 3000);
-					}
+					toast.success("Files saved successfully!", 3000);
 				}
 			}
 		} catch (error) {
@@ -295,19 +250,6 @@ export function ScreenshotViewer({
 				</div>
 
 				<div className="flex items-center gap-2 ml-4">
-					{/* Change directory button - only show if File System Access API is supported */}
-					{isFileSystemAccessSupported() && (
-						<button
-							type="button"
-							onClick={handleChangeDirectory}
-							className="flex items-center gap-2 px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg transition-colors"
-							title="Change download directory"
-						>
-							<FolderOpen className="w-4 h-4" />
-							<span className="hidden sm:inline">Change Folder</span>
-						</button>
-					)}
-
 					{/* Download button */}
 					<button
 						type="button"

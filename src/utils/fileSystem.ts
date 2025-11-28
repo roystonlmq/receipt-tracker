@@ -274,58 +274,81 @@ export function downloadFileFallback(
 }
 
 /**
- * Download a file with persistent directory support
- * Falls back to traditional download if File System Access API is not available
- * Returns false if user cancels the directory picker
+ * Download a file using showSaveFilePicker with directory memory
+ * Falls back to traditional download if not supported
+ * Returns false if user cancels
  */
 export async function downloadFile(
 	filename: string,
 	content: string | Blob,
 	mimeType?: string,
 ): Promise<{ success: boolean; usedPersistentDirectory: boolean; cancelled?: boolean }> {
-	// Try to use persistent directory if supported
-	if (isFileSystemAccessSupported()) {
+	// Check if showSaveFilePicker is supported
+	if ("showSaveFilePicker" in window) {
 		try {
-			let directoryHandle = await getDownloadDirectory();
-
-			// If no directory is stored or permission denied, ask user
-			if (!directoryHandle) {
-				directoryHandle = await pickDownloadDirectory();
-				
-				// User cancelled the directory picker - abort download
-				if (!directoryHandle) {
-					return { success: false, usedPersistentDirectory: false, cancelled: true };
+			// Get the last used directory from localStorage
+			const lastDirectory = localStorage.getItem("lastDownloadDirectory");
+			
+			// Prepare blob content
+			let blobContent: Blob;
+			if (typeof content === "string" && content.startsWith("data:")) {
+				// Extract base64 data from data URL
+				const base64Data = content.split(",")[1];
+				const binaryData = atob(base64Data);
+				const bytes = new Uint8Array(binaryData.length);
+				for (let i = 0; i < binaryData.length; i++) {
+					bytes[i] = binaryData.charCodeAt(i);
 				}
+				blobContent = new Blob([bytes], {
+					type: mimeType || "application/octet-stream",
+				});
+			} else if (typeof content === "string") {
+				blobContent = new Blob([content], {
+					type: mimeType || "text/plain",
+				});
+			} else {
+				blobContent = content;
 			}
 
-			// If user selected a directory, save there
-			if (directoryHandle) {
-				// Convert data URL to blob if needed
-				let blobContent: Blob;
-				if (typeof content === "string" && content.startsWith("data:")) {
-					// Extract base64 data from data URL
-					const base64Data = content.split(",")[1];
-					const binaryData = atob(base64Data);
-					const bytes = new Uint8Array(binaryData.length);
-					for (let i = 0; i < binaryData.length; i++) {
-						bytes[i] = binaryData.charCodeAt(i);
-					}
-					blobContent = new Blob([bytes], {
-						type: mimeType || "application/octet-stream",
-					});
-				} else if (typeof content === "string") {
-					blobContent = new Blob([content], {
-						type: mimeType || "text/plain",
-					});
-				} else {
-					blobContent = content;
-				}
+			// Show save file picker
+			const options: any = {
+				suggestedName: filename,
+				types: [
+					{
+						description: "Files",
+						accept: {
+							[mimeType || "application/octet-stream"]: [
+								`.${filename.split(".").pop()}`,
+							],
+						},
+					},
+				],
+			};
 
-				await saveFileToDirectory(directoryHandle, filename, blobContent);
-				return { success: true, usedPersistentDirectory: true };
+			// Add startIn option if we have a last directory
+			if (lastDirectory) {
+				options.startIn = lastDirectory;
 			}
+
+			const fileHandle = await (window as any).showSaveFilePicker(options);
+
+			// Save the directory for next time
+			// Note: We can't get the directory path directly, but the browser remembers it
+			localStorage.setItem("lastDownloadDirectory", "downloads");
+
+			// Write the file
+			const writable = await fileHandle.createWritable();
+			await writable.write(blobContent);
+			await writable.close();
+
+			return { success: true, usedPersistentDirectory: true };
 		} catch (error) {
-			console.error("Failed to use persistent directory:", error);
+			// User cancelled
+			if (error instanceof Error && error.name === "AbortError") {
+				return { success: false, usedPersistentDirectory: false, cancelled: true };
+			}
+			
+			console.error("Failed to use save file picker:", error);
 			// Fall through to traditional download
 		}
 	}
