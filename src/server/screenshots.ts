@@ -199,7 +199,7 @@ export const getScreenshots = createServerFn({ method: "GET" })
 				}
 				
 				if (searchQuery) {
-					query += ` AND filename ILIKE $${paramIndex}`;
+					query += ` AND (filename ILIKE $${paramIndex} OR notes ILIKE $${paramIndex})`;
 					params.push(`%${searchQuery}%`);
 					paramIndex++;
 				}

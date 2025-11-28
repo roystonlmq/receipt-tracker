@@ -8,6 +8,7 @@ import { retryWithBackoff, isRetryableError } from "@/utils/retry";
 interface ScreenshotUploadProps {
 	userId: number;
 	onUploadComplete: (screenshots: Screenshot[]) => void;
+	onViewScreenshot?: (screenshot: Screenshot) => void;
 	onError?: (message: string) => void;
 	onSuccess?: (message: string) => void;
 }
@@ -15,6 +16,7 @@ interface ScreenshotUploadProps {
 export function ScreenshotUpload({
 	userId,
 	onUploadComplete,
+	onViewScreenshot,
 	onError,
 	onSuccess,
 }: ScreenshotUploadProps) {
@@ -158,6 +160,11 @@ export function ScreenshotUpload({
 				onUploadComplete(successfulUploads);
 				const message = `Successfully uploaded ${successfulUploads.length} screenshot${successfulUploads.length > 1 ? "s" : ""}`;
 				onSuccess?.(message);
+				
+				// Auto-open viewer for first screenshot
+				if (onViewScreenshot && successfulUploads[0]) {
+					onViewScreenshot(successfulUploads[0]);
+				}
 			}
 
 			// Show error if some uploads failed

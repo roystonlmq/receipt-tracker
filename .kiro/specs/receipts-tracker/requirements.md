@@ -20,7 +20,7 @@ The Receipts Tracker is a web application designed to help users manage screensh
 
 ### Requirement 1: Screenshot Upload
 
-**User Story:** As a user, I want to upload screenshots to the system, so that I can store and organize my receipts and important captures.
+**User Story:** As a user, I want to upload screenshots to the system and immediately add notes, so that I can store and organize my receipts with context while the details are fresh in my mind.
 
 #### Acceptance Criteria
 
@@ -29,6 +29,8 @@ The Receipts Tracker is a web application designed to help users manage screensh
 3. WHEN a screenshot is uploaded without a filename following the standard format, THE System SHALL automatically label it using the current timestamp in "DDMMYY - HHMM - screenshot.png" format
 4. WHEN a screenshot filename follows the "DDMMYY - HHMM - screenshot.png" format, THE System SHALL parse the date and time components
 5. WHEN a screenshot is successfully uploaded, THE System SHALL associate it with the authenticated User Profile
+6. WHEN a single screenshot upload completes successfully, THE System SHALL automatically open the Screenshot Viewer for that screenshot
+7. WHEN multiple screenshots are uploaded, THE System SHALL open the Screenshot Viewer for the first uploaded screenshot
 
 ### Requirement 2: Screenshot Viewing
 
@@ -141,15 +143,16 @@ The Receipts Tracker is a web application designed to help users manage screensh
 
 ### Requirement 11: Search and Filter
 
-**User Story:** As a user, I want to search for specific screenshots, so that I can quickly locate receipts without browsing through folders.
+**User Story:** As a user, I want to search for specific screenshots by name or notes content, so that I can quickly locate receipts without browsing through folders.
 
 #### Acceptance Criteria
 
 1. WHEN a user enters text in the search field, THE System SHALL filter screenshots by name matching the search query
-2. WHEN search results are displayed, THE System SHALL show screenshots from all folders that match the query
-3. WHEN a user clears the search field, THE System SHALL return to the normal folder view
-4. WHEN displaying search results, THE System SHALL indicate which folder each screenshot belongs to
-5. WHEN a user clicks on a search result, THE System SHALL display the full screenshot details
+2. WHEN a user enters text in the search field, THE System SHALL filter screenshots by notes content matching the search query
+3. WHEN search results are displayed, THE System SHALL show screenshots from all folders that match the query in either filename or notes
+4. WHEN a user clears the search field, THE System SHALL return to the normal folder view
+5. WHEN displaying search results, THE System SHALL indicate which folder each screenshot belongs to
+6. WHEN a user clicks on a search result, THE System SHALL display the full screenshot details
 
 ### Requirement 12: Data Persistence and Reliability
 
@@ -177,15 +180,18 @@ The Receipts Tracker is a web application designed to help users manage screensh
 
 ### Requirement 14: Screenshot Notes
 
-**User Story:** As a user, I want to add notes to my screenshots, so that I can remember important details about each receipt.
+**User Story:** As a user, I want to add notes to my screenshots with keyboard shortcuts, so that I can quickly save important details about each receipt.
 
 #### Acceptance Criteria
 
 1. WHEN a user views a screenshot, THE System SHALL provide an interface to add or edit notes
 2. WHEN a user enters note text for a screenshot, THE System SHALL store the notes in the Database associated with that screenshot
-3. WHEN a user saves a screenshot to a local folder, THE System SHALL create a text file named "DDMMYY - HHMM - screenshot_note.txt"
-4. WHEN the note text file is created, THE System SHALL write the user's notes into the file content
-5. WHEN a screenshot has associated notes, THE System SHALL display a visual indicator in the File Explorer
+3. WHEN a user presses Ctrl+S (or Cmd+S on Mac) while editing notes, THE System SHALL save the notes to the Database
+4. WHEN the Screenshot Viewer is displayed, THE System SHALL show a visual hint indicating the Ctrl+S keyboard shortcut for saving notes
+5. WHEN a user initiates download of a screenshot, THE System SHALL display a file explorer dialog for selecting the save location
+6. WHEN a user saves a screenshot to a local folder, THE System SHALL create a text file named "DDMMYY - HHMM - screenshot_note.txt"
+7. WHEN the note text file is created, THE System SHALL write the user's notes into the file content
+8. WHEN a screenshot has associated notes, THE System SHALL display a visual indicator in the File Explorer
 
 ### Requirement 15: User Interface Design
 
@@ -199,7 +205,21 @@ The Receipts Tracker is a web application designed to help users manage screensh
 4. WHEN displaying interface components, THE System SHALL use a consistent color scheme throughout the application
 5. WHEN a user interacts with buttons or controls, THE System SHALL provide visual feedback including hover states
 
-### Requirement 16: Error Handling
+### Requirement 16: Persistent Download Directory
+
+**User Story:** As a user, I want the system to remember my preferred download location and only download when I confirm, so that I have full control over where my files are saved.
+
+#### Acceptance Criteria
+
+1. WHEN a user downloads a screenshot for the first time, THE System SHALL display a file explorer dialog to select the save location
+2. WHEN a user selects a directory and saves a screenshot, THE System SHALL store the selected directory path in browser local storage
+3. WHEN a user downloads another screenshot, THE System SHALL open the file explorer dialog at the previously used directory
+4. WHEN a user changes the save location, THE System SHALL update the stored directory path for future downloads
+5. WHEN the stored directory path is no longer accessible, THE System SHALL fall back to the browser's default download location
+6. WHEN a user cancels the file explorer dialog without selecting a location, THE System SHALL abort the download operation and not save any files
+7. WHEN a download is cancelled, THE System SHALL not write any files to the default downloads folder
+
+### Requirement 17: Error Handling
 
 **User Story:** As a user, I want the application to handle errors gracefully, so that I understand what went wrong and can recover easily.
 

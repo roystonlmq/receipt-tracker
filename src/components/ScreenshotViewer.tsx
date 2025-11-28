@@ -1,7 +1,10 @@
 import { useState, useEffect } from "react";
-import { X, ChevronLeft, ChevronRight, Download, Save } from "lucide-react";
+import { X, ChevronLeft, ChevronRight, Download, Save, FolderOpen } from "lucide-react";
 import type { Screenshot } from "@/types/screenshot";
 import { updateScreenshotNotes, downloadScreenshotWithNotes } from "@/server/screenshots";
+import { downloadFile, pickDownloadDirectory, isFileSystemAccessSupported } from "@/utils/fileSystem";
+import { useToast } from "@/hooks/useToast";
+import { ToastContainer } from "@/components/Toast";
 
 interface ScreenshotViewerProps {
 	screenshot: Screenshot;
@@ -22,13 +25,14 @@ export function ScreenshotViewer({
 	const [isSaving, setIsSaving] = useState(false);
 	const [isDownloading, setIsDownloading] = useState(false);
 	const [saveSuccess, setSaveSuccess] = useState(false);
+	const toast = useToast();
 
 	// Update notes when screenshot changes
 	useEffect(() => {
 		setNotes(screenshot.notes || "");
 	}, [screenshot.id, screenshot.notes]);
 
-	// Handle ESC key to close
+	// Handle keyboard shortcuts
 	useEffect(() => {
 		const handleKeyDown = (e: KeyboardEvent) => {
 			if (e.key === "Escape") {
@@ -37,12 +41,18 @@ export function ScreenshotViewer({
 				onNavigate("prev");
 			} else if (e.key === "ArrowRight" && onNavigate) {
 				onNavigate("next");
+			} else if ((e.ctrlKey || e.metaKey) && e.key === "s") {
+				// Ctrl+S (Windows/Linux) or Cmd+S (Mac) to save notes
+				e.preventDefault(); // Prevent browser save dialog
+				if (notes !== (screenshot.notes || "")) {
+					handleSaveNotes();
+				}
 			}
 		};
 
 		window.addEventListener("keydown", handleKeyDown);
 		return () => window.removeEventListener("keydown", handleKeyDown);
-	}, [onClose, onNavigate]);
+	}, [onClose, onNavigate, notes, screenshot.notes]);
 
 	// Determine if navigation is available
 	const currentIndex = allScreenshots.findIndex((s) => s.id === screenshot.id);
@@ -66,6 +76,7 @@ export function ScreenshotViewer({
 			// Update was successful - show success state
 			setSaveSuccess(true);
 			setTimeout(() => setSaveSuccess(false), 2000);
+			toast.success("Notes saved successfully!");
 
 			// Optimistically update the parent with the new notes
 			if (onUpdate) {
@@ -77,9 +88,65 @@ export function ScreenshotViewer({
 			}
 		} catch (error) {
 			console.error("Failed to save notes:", error);
-			alert("Failed to save notes. Please try again.");
+
+			// Handle specific error cases
+			if (error instanceof Error) {
+				if (error.message.includes("network")) {
+					toast.error(
+						"Network error. Please check your connection and try again.",
+						7000,
+					);
+				} else if (error.message.includes("access denied")) {
+					toast.error(
+						"You don't have permission to edit this screenshot.",
+						7000,
+					);
+				} else {
+					toast.error(`Failed to save notes: ${error.message}`, 7000);
+				}
+			} else {
+				toast.error("Failed to save notes. Please try again.", 5000);
+			}
 		} finally {
 			setIsSaving(false);
+		}
+	};
+
+	const handleChangeDirectory = async () => {
+		try {
+			if (!isFileSystemAccessSupported()) {
+				toast.error(
+					"Your browser doesn't support persistent download directories. Files will download to your default location.",
+					7000,
+				);
+				return;
+			}
+
+			const handle = await pickDownloadDirectory();
+			if (handle) {
+				toast.success("Download directory updated successfully!");
+			}
+		} catch (error) {
+			console.error("Failed to change directory:", error);
+
+			// Handle specific error cases
+			if (error instanceof Error) {
+				if (error.message.includes("not supported")) {
+					toast.error(
+						"Your browser doesn't support this feature. Files will download to your default location.",
+						7000,
+					);
+				} else if (error.name === "SecurityError") {
+					toast.error(
+						"Permission denied. Please allow access to select a download directory.",
+						7000,
+					);
+				} else {
+					toast.error(`Failed to change directory: ${error.message}`, 7000);
+				}
+			} else {
+				toast.error("Failed to change download directory.", 5000);
+			}
 		}
 	};
 
@@ -96,32 +163,73 @@ export function ScreenshotViewer({
 			});
 
 			if (result.success && result.screenshot) {
-				// Download image
-				const imageLink = document.createElement("a");
-				imageLink.href = result.screenshot.imageData;
-				imageLink.download = result.screenshot.filename;
-				document.body.appendChild(imageLink);
-				imageLink.click();
-				document.body.removeChild(imageLink);
+				// Download image using persistent directory
+				const imageResult = await downloadFile(
+					result.screenshot.filename,
+					result.screenshot.imageData,
+					result.screenshot.mimeType,
+				);
 
-				// Download notes if they exist
-				if (result.screenshot.notes && result.screenshot.notes.trim()) {
-					const notesBlob = new Blob([result.screenshot.notes], {
-						type: "text/plain",
-					});
-					const notesUrl = URL.createObjectURL(notesBlob);
-					const notesLink = document.createElement("a");
-					notesLink.href = notesUrl;
-					notesLink.download = result.screenshot.notesFilename;
-					document.body.appendChild(notesLink);
-					notesLink.click();
-					document.body.removeChild(notesLink);
-					URL.revokeObjectURL(notesUrl);
+				// Check if user cancelled
+				if (imageResult.cancelled) {
+					// User cancelled - don't show error, just abort silently
+					return;
+				}
+
+				// If image download succeeded, download notes if they exist
+				if (imageResult.success && result.screenshot.notes && result.screenshot.notes.trim()) {
+					const notesResult = await downloadFile(
+						result.screenshot.notesFilename,
+						result.screenshot.notes,
+						"text/plain",
+					);
+					
+					// Check if user cancelled notes download
+					if (notesResult.cancelled) {
+						return;
+					}
+				}
+
+				// Show success message only if download completed
+				if (imageResult.success) {
+					if (imageResult.usedPersistentDirectory) {
+						toast.success(
+							"Files saved to your selected download directory!",
+							5000,
+						);
+					} else {
+						toast.success("Download started!", 3000);
+					}
 				}
 			}
 		} catch (error) {
 			console.error("Failed to download:", error);
-			alert("Failed to download screenshot. Please try again.");
+
+			// Handle specific error cases
+			if (error instanceof Error) {
+				if (error.message.includes("network")) {
+					toast.error(
+						"Network error. Please check your connection and try again.",
+						7000,
+					);
+				} else if (error.message.includes("access denied") || error.message.includes("Permission denied")) {
+					toast.error(
+						"Permission denied. Please allow access to save files.",
+						7000,
+					);
+				} else if (error.message.includes("not supported")) {
+					toast.warning(
+						"Your browser doesn't support this feature. Using standard download instead.",
+						7000,
+					);
+					// Try fallback download
+					// This would be handled by the downloadFile function automatically
+				} else {
+					toast.error(`Download failed: ${error.message}`, 7000);
+				}
+			} else {
+				toast.error("Failed to download screenshot. Please try again.", 5000);
+			}
 		} finally {
 			setIsDownloading(false);
 		}
@@ -151,7 +259,9 @@ export function ScreenshotViewer({
 	};
 
 	return (
-		<div className="fixed inset-0 z-50 bg-black/95 flex flex-col" onClick={handleBackdropClick}>
+		<>
+			<ToastContainer toasts={toast.toasts} onClose={toast.removeToast} />
+			<div className="fixed inset-0 z-50 bg-black/95 flex flex-col" onClick={handleBackdropClick}>
 			{/* Keyboard shortcuts hint - moved to bottom left */}
 			<div className="absolute bottom-4 left-4 bg-black/50 backdrop-blur-sm border border-white/10 rounded-lg px-3 py-2 text-xs text-white/60 flex items-center gap-4">
 				<span className="flex items-center gap-1">
@@ -185,6 +295,19 @@ export function ScreenshotViewer({
 				</div>
 
 				<div className="flex items-center gap-2 ml-4">
+					{/* Change directory button - only show if File System Access API is supported */}
+					{isFileSystemAccessSupported() && (
+						<button
+							type="button"
+							onClick={handleChangeDirectory}
+							className="flex items-center gap-2 px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg transition-colors"
+							title="Change download directory"
+						>
+							<FolderOpen className="w-4 h-4" />
+							<span className="hidden sm:inline">Change Folder</span>
+						</button>
+					)}
+
 					{/* Download button */}
 					<button
 						type="button"
@@ -246,13 +369,16 @@ export function ScreenshotViewer({
 						<h3 className="text-lg font-semibold text-white">Notes</h3>
 					</div>
 
-					<div className="flex-1 p-4">
+					<div className="flex-1 p-4 flex flex-col">
 						<textarea
 							value={notes}
 							onChange={(e) => setNotes(e.target.value)}
 							placeholder="Add notes about this screenshot..."
-							className="w-full h-full bg-white/5 border border-white/10 rounded-lg p-3 text-white placeholder-white/40 resize-none focus:outline-none focus:ring-2 focus:ring-blue-500"
+							className="flex-1 w-full bg-white/5 border border-white/10 rounded-lg p-3 text-white placeholder-white/40 resize-none focus:outline-none focus:ring-2 focus:ring-blue-500"
 						/>
+						<div className="text-xs text-white/40 mt-2 flex items-center gap-1">
+							Press <kbd className="px-2 py-1 bg-white/10 rounded text-white/60">Ctrl+S</kbd> to save
+						</div>
 					</div>
 
 					<div className="p-4 border-t border-white/10">
@@ -269,5 +395,6 @@ export function ScreenshotViewer({
 				</div>
 			</div>
 		</div>
+		</>
 	);
 }

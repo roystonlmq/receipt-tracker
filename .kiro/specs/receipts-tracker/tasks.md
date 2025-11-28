@@ -95,11 +95,11 @@
 
 - [ ]* 5.2 Write property test for search filtering accuracy
   - **Property 32: Search filtering accuracy**
-  - **Validates: Requirements 11.1**
+  - **Validates: Requirements 11.1, 11.2**
 
 - [ ]* 5.3 Write property test for cross-folder search
   - **Property 33: Cross-folder search**
-  - **Validates: Requirements 11.2**
+  - **Validates: Requirements 11.3**
 
 - [ ]* 5.4 Write property test for multi-criteria sorting
   - **Property 28: Multi-criteria sorting**
@@ -280,7 +280,7 @@
 
 - [ ]* 13.1 Write property test for search result folder indication
   - **Property 34: Search result folder indication**
-  - **Validates: Requirements 11.4**
+  - **Validates: Requirements 11.5**
 
 - [x] 14. Create ConfirmDialog component
 
@@ -362,7 +362,107 @@
   - Verify all features work as expected
   - _Requirements: All_
 
-- [x] 20. Final checkpoint - Ensure all tests pass
+- [x] 19.1 Implement auto-open viewer after upload
+
+
+
+  - Add onViewScreenshot callback prop to ScreenshotUpload component
+  - Call callback with first uploaded screenshot after successful upload
+  - Update screenshots route to handle viewer state management
+  - Open ScreenshotViewer automatically when callback is triggered
+  - Test with single and multiple screenshot uploads
+  - _Requirements: 1.6, 1.7_
+
+- [ ]* 19.1.1 Write property test for auto-open viewer
+  - **Property 2a: Auto-open viewer after upload**
+  - **Validates: Requirements 1.6**
+
+- [x] 19.2 Implement keyboard shortcut for saving notes
+
+
+
+  - Add keyboard event listener in ScreenshotViewer for Ctrl+S (Cmd+S on Mac)
+  - Prevent default browser save dialog behavior
+  - Trigger notes save operation when shortcut is pressed
+  - Display visual feedback when notes are saved
+  - Add persistent hint showing the Ctrl+S shortcut near notes field
+  - Test on both Windows/Linux and Mac platforms
+  - _Requirements: 14.3, 14.4_
+
+- [ ]* 19.2.1 Write property test for notes save keyboard shortcut
+  - **Property 44: Notes save keyboard shortcut**
+  - **Validates: Requirements 14.3**
+
+- [ ]* 19.2.2 Write property test for keyboard shortcut hint visibility
+  - **Property 45: Keyboard shortcut hint visibility**
+  - **Validates: Requirements 14.4**
+
+- [x] 19.3 Fix download cancellation behavior
+
+
+
+
+  - Update download utility to catch AbortError when user cancels file picker
+  - Abort download operation completely when user cancels
+  - Ensure no files are written to default downloads folder on cancellation
+  - Return boolean from download function to indicate success/cancellation
+  - Update ScreenshotViewer to handle cancellation gracefully
+  - Test cancellation flow thoroughly
+  - _Requirements: 16.6, 16.7_
+
+- [ ]* 19.3.1 Write property test for download cancellation
+  - **Property 43: Download cancellation**
+  - **Validates: Requirements 16.6, 16.7**
+
+- [x] 20. Extend search to include notes content
+
+
+
+
+
+
+  - Update getScreenshots server function to search both filename and notes fields
+  - Modify SQL query to use OR condition for filename ILIKE and notes ILIKE
+  - Test search with various queries matching filenames and notes
+  - Verify search results include screenshots matching either field
+  - _Requirements: 11.1, 11.2, 11.3_
+
+- [ ]* 20.1 Write property test for notes search accuracy
+  - **Property 32: Search filtering accuracy (notes)**
+  - **Validates: Requirements 11.2**
+
+- [x] 21. Implement persistent download directory
+
+
+
+  - Create utility functions for File System Access API
+  - Implement directory picker with showDirectoryPicker()
+  - Store directory handle in IndexedDB for persistence
+  - Add permission request logic for stored directory handles
+  - Implement fallback to standard download for unsupported browsers
+  - Update ScreenshotViewer download functionality to use new system
+  - _Requirements: 16.1, 16.2, 16.3, 16.4, 16.5_
+
+- [ ]* 21.1 Write property test for download directory persistence
+  - **Property 41: Download directory persistence**
+  - **Validates: Requirements 16.2, 16.3**
+
+- [ ]* 21.2 Write property test for download directory update
+  - **Property 42: Download directory update**
+  - **Validates: Requirements 16.4**
+
+- [x] 22. Update error handling for new features
+
+
+
+
+  - Add error handling for File System Access API failures
+  - Display user-friendly messages when directory access is denied
+  - Handle browser compatibility issues gracefully
+  - Test error scenarios for search with notes
+  - _Requirements: 17.1, 17.2_
+
+- [x] 23. Final checkpoint - Ensure all tests pass
 
 
 

@@ -203,6 +203,7 @@ const getScreenshots = createServerFn({ method: 'GET' })
     // Validate user authentication
     // Use raw PostgreSQL client for reliable query execution
     // Build dynamic SQL query based on filters (folderDate, searchQuery)
+    // When searchQuery is provided, search both filename and notes fields
     // Return screenshots with metadata ordered by upload date
   })
 ```
@@ -443,6 +444,10 @@ export async function extractExifData(file: File): Promise<ExifData | null> {
 *For any* screenshot uploaded by a user, querying the database immediately after upload should return a screenshot record with matching image data.
 **Validates: Requirements 1.2**
 
+### Property 2a: Auto-open viewer after upload
+*For any* single screenshot upload that completes successfully, the Screenshot Viewer should be opened displaying that screenshot.
+**Validates: Requirements 1.6**
+
 ### Property 3: Automatic filename generation
 *For any* uploaded file without a filename matching the "DDMMYY - HHMM - name.png" format, the system should automatically generate a filename using the current timestamp in the correct format.
 **Validates: Requirements 1.3**
@@ -560,16 +565,16 @@ export async function extractExifData(file: File): Promise<ExifData | null> {
 **Validates: Requirements 10.5**
 
 ### Property 32: Search filtering accuracy
-*For any* search query, all returned screenshots should have filenames that contain the search query as a substring (case-insensitive).
-**Validates: Requirements 11.1**
+*For any* search query, all returned screenshots should have either filenames or notes content that contain the search query as a substring (case-insensitive).
+**Validates: Requirements 11.1, 11.2**
 
 ### Property 33: Cross-folder search
 *For any* search query, the results should include matching screenshots from all folders, not just the currently viewed folder.
-**Validates: Requirements 11.2**
+**Validates: Requirements 11.3**
 
 ### Property 34: Search result folder indication
 *For any* screenshot in search results, the display should indicate which folder (date) the screenshot belongs to.
-**Validates: Requirements 11.4**
+**Validates: Requirements 11.5**
 
 ### Property 35: Notes persistence
 *For any* screenshot, after adding or updating notes and querying the database, the returned screenshot should have the updated notes text.
@@ -593,7 +598,27 @@ export async function extractExifData(file: File): Promise<ExifData | null> {
 
 ### Property 40: Field-specific error display
 *For any* form validation failure, each invalid field should be highlighted with a specific error message indicating the validation issue.
-**Validates: Requirements 16.5**
+**Validates: Requirements 17.5**
+
+### Property 41: Download directory persistence
+*For any* download operation, after saving a screenshot to a directory, the next download should open the file explorer at the same directory path.
+**Validates: Requirements 16.2, 16.3**
+
+### Property 42: Download directory update
+*For any* download operation where the user selects a different directory, the stored directory path should be updated to the new location.
+**Validates: Requirements 16.4**
+
+### Property 43: Download cancellation
+*For any* download operation where the user cancels the file explorer dialog, no files should be written to any location including the default downloads folder.
+**Validates: Requirements 16.6, 16.7**
+
+### Property 44: Notes save keyboard shortcut
+*For any* Screenshot Viewer with unsaved notes, pressing Ctrl+S (or Cmd+S on Mac) should save the notes to the database.
+**Validates: Requirements 14.3**
+
+### Property 45: Keyboard shortcut hint visibility
+*For any* Screenshot Viewer display, a visual hint for the Ctrl+S save shortcut should be visible to the user.
+**Validates: Requirements 14.4**
 
 
 ## Error Handling
@@ -962,6 +987,157 @@ The initial implementation will use a simple user ID-based system. For productio
 - **CORS**: Configure CORS for file uploads if needed
 - **Rate Limiting**: Implement rate limiting for upload endpoints
 - **Monitoring**: Add error tracking and performance monitoring
+
+### Persistent Download Directory Implementation
+
+The application will use the File System Access API (available in modern browsers) to provide a native file explorer dialog and remember the user's preferred download location.
+
+**Implementation Strategy**:
+1. Use `window.showDirectoryPicker()` to display native directory picker
+2. Store directory handle in IndexedDB for persistence across sessions
+3. Request permission to access the stored directory on subsequent downloads
+4. Fall back to standard download if File System Access API is not available or permission is denied
+5. Store directory path in localStorage as a backup for displaying the last used path
+6. **Handle cancellation**: Catch `AbortError` when user cancels the dialog and abort the download operation
+7. **No fallback on cancel**: Do not write files to default downloads folder when user explicitly cancels
+
+**Browser Compatibility**:
+- Chrome/Edge 86+: Full support
+- Safari 15.2+: Full support  
+- Firefox: Not supported (will fall back to standard download)
+
+**Code Example**:
+```typescript
+// src/utils/download.ts
+export async function saveScreenshotWithDirectory(
+  filename: string,
+  imageData: Blob,
+  notesData: string | null
+): Promise<boolean> {
+  try {
+    // Get stored directory handle from IndexedDB
+    const dirHandle = await getStoredDirectoryHandle()
+    
+    // Request permission if needed
+    if (dirHandle && await dirHandle.requestPermission({ mode: 'readwrite' }) === 'granted') {
+      // Save files to the directory
+      await saveToDirectory(dirHandle, filename, imageData, notesData)
+      return true
+    }
+    
+    // Show directory picker if no stored handle or permission denied
+    const newDirHandle = await window.showDirectoryPicker()
+    await saveToDirectory(newDirHandle, filename, imageData, notesData)
+    
+    // Store the new directory handle
+    await storeDirectoryHandle(newDirHandle)
+    return true
+  } catch (error) {
+    // User cancelled the dialog - abort download
+    if (error.name === 'AbortError') {
+      console.log('Download cancelled by user')
+      return false
+    }
+    
+    // For other errors, fall back to standard download
+    downloadFile(filename, imageData)
+    if (notesData) {
+      downloadFile(`${filename}_note.txt`, new Blob([notesData]))
+    }
+    return true
+  }
+}
+```
+
+### Keyboard Shortcuts for Notes Implementation
+
+The Screenshot Viewer will support Ctrl+S (Cmd+S on Mac) to save notes, with a visible hint to guide users.
+
+**Implementation Strategy**:
+1. Add keyboard event listener in ScreenshotViewer component
+2. Detect Ctrl+S (Windows/Linux) or Cmd+S (Mac) key combination
+3. Prevent default browser save dialog behavior
+4. Trigger notes save operation
+5. Display visual feedback (e.g., "Saved!" toast)
+6. Show persistent hint in the UI (e.g., "Press Ctrl+S to save" near the notes field)
+
+**Code Example**:
+```typescript
+// In ScreenshotViewer component
+useEffect(() => {
+  const handleKeyDown = (e: KeyboardEvent) => {
+    // Check for Ctrl+S (Windows/Linux) or Cmd+S (Mac)
+    if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+      e.preventDefault() // Prevent browser save dialog
+      handleSaveNotes()
+    }
+  }
+  
+  window.addEventListener('keydown', handleKeyDown)
+  return () => window.removeEventListener('keydown', handleKeyDown)
+}, [notes])
+
+// In the render
+<div className="notes-section">
+  <textarea value={notes} onChange={handleNotesChange} />
+  <div className="text-xs text-white/40 mt-1">
+    Press <kbd className="px-2 py-1 bg-white/10 rounded">Ctrl+S</kbd> to save
+  </div>
+</div>
+```
+
+### Auto-Open Viewer After Upload Implementation
+
+After a successful screenshot upload, the system will automatically open the Screenshot Viewer to allow immediate note entry.
+
+**Implementation Strategy**:
+1. Modify `ScreenshotUpload` component to accept an `onViewScreenshot` callback prop
+2. After successful upload, call the callback with the uploaded screenshot data
+3. Parent component (screenshots route) manages the viewer state
+4. For single uploads, open viewer immediately
+5. For batch uploads, open viewer for the first screenshot
+6. User can navigate to other uploaded screenshots using next/previous buttons in viewer
+
+**Code Example**:
+```typescript
+// In ScreenshotUpload component
+interface ScreenshotUploadProps {
+  userId: number
+  onUploadComplete: (screenshots: Screenshot[]) => void
+  onViewScreenshot?: (screenshot: Screenshot) => void // New callback
+  onError?: (message: string) => void
+  onSuccess?: (message: string) => void
+}
+
+// After successful upload
+if (successfulUploads.length > 0) {
+  onUploadComplete(successfulUploads)
+  // Auto-open viewer for first screenshot
+  if (onViewScreenshot && successfulUploads[0]) {
+    onViewScreenshot(successfulUploads[0])
+  }
+}
+```
+
+### Search Notes Implementation
+
+The search functionality will be extended to search both filename and notes fields using SQL's ILIKE operator for case-insensitive matching.
+
+**Implementation Strategy**:
+1. Modify the `getScreenshots` server function to accept a searchQuery parameter
+2. Build SQL query with OR condition: `filename ILIKE %query% OR notes ILIKE %query%`
+3. Ensure proper indexing on both filename and notes columns for performance
+4. Return all matching screenshots with indication of which field matched
+
+**Code Example**:
+```typescript
+// In getScreenshots server function
+if (searchQuery) {
+  query += ` AND (filename ILIKE $${paramIndex} OR notes ILIKE $${paramIndex})`
+  params.push(`%${searchQuery}%`)
+  paramIndex++
+}
+```
 
 ### Future Enhancements
 

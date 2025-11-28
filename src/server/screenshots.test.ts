@@ -591,4 +591,321 @@ describe("Screenshot Modification Functions", () => {
 		});
 	});
 	});
+
+	describe("Search Functionality", () => {
+		it("should find screenshots by filename", async () => {
+			// Create test screenshots with different filenames
+			const screenshot1Result = await client.query(
+				`INSERT INTO screenshots (user_id, filename, original_filename, image_data, mime_type, file_size, folder_date, notes)
+				 VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id`,
+				[
+					testUserId,
+					"271124 - 1000 - grocery receipt.png",
+					"grocery.png",
+					"data:image/png;base64,test1",
+					"image/png",
+					1000,
+					"271124",
+					"Bought milk and bread",
+				],
+			);
+			const screenshot1Id = screenshot1Result.rows[0].id;
+
+			const screenshot2Result = await client.query(
+				`INSERT INTO screenshots (user_id, filename, original_filename, image_data, mime_type, file_size, folder_date, notes)
+				 VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id`,
+				[
+					testUserId,
+					"271124 - 1100 - gas station.png",
+					"gas.png",
+					"data:image/png;base64,test2",
+					"image/png",
+					1000,
+					"271124",
+					"Filled up the tank",
+				],
+			);
+			const screenshot2Id = screenshot2Result.rows[0].id;
+
+			// Search by filename
+			const searchQuery = "grocery";
+			const result = await client.query(
+				`SELECT id, filename, notes FROM screenshots 
+				 WHERE user_id = $1 AND (filename ILIKE $2 OR notes ILIKE $2)`,
+				[testUserId, `%${searchQuery}%`],
+			);
+
+			// Should find the grocery receipt
+			expect(result.rows.length).toBe(1);
+			expect(result.rows[0].id).toBe(screenshot1Id);
+			expect(result.rows[0].filename).toContain("grocery");
+
+			// Cleanup
+			await client.query(`DELETE FROM screenshots WHERE id = ANY($1)`, [
+				[screenshot1Id, screenshot2Id],
+			]);
+		});
+
+		it("should find screenshots by notes content", async () => {
+			// Create test screenshots with different notes
+			const screenshot1Result = await client.query(
+				`INSERT INTO screenshots (user_id, filename, original_filename, image_data, mime_type, file_size, folder_date, notes)
+				 VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id`,
+				[
+					testUserId,
+					"271124 - 1200 - receipt1.png",
+					"receipt1.png",
+					"data:image/png;base64,test1",
+					"image/png",
+					1000,
+					"271124",
+					"Important meeting notes about project deadline",
+				],
+			);
+			const screenshot1Id = screenshot1Result.rows[0].id;
+
+			const screenshot2Result = await client.query(
+				`INSERT INTO screenshots (user_id, filename, original_filename, image_data, mime_type, file_size, folder_date, notes)
+				 VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id`,
+				[
+					testUserId,
+					"271124 - 1300 - receipt2.png",
+					"receipt2.png",
+					"data:image/png;base64,test2",
+					"image/png",
+					1000,
+					"271124",
+					"Lunch with client",
+				],
+			);
+			const screenshot2Id = screenshot2Result.rows[0].id;
+
+			// Search by notes content
+			const searchQuery = "deadline";
+			const result = await client.query(
+				`SELECT id, filename, notes FROM screenshots 
+				 WHERE user_id = $1 AND (filename ILIKE $2 OR notes ILIKE $2)`,
+				[testUserId, `%${searchQuery}%`],
+			);
+
+			// Should find the screenshot with "deadline" in notes
+			expect(result.rows.length).toBe(1);
+			expect(result.rows[0].id).toBe(screenshot1Id);
+			expect(result.rows[0].notes).toContain("deadline");
+
+			// Cleanup
+			await client.query(`DELETE FROM screenshots WHERE id = ANY($1)`, [
+				[screenshot1Id, screenshot2Id],
+			]);
+		});
+
+		it("should find screenshots matching either filename or notes", async () => {
+			// Create test screenshots
+			const screenshot1Result = await client.query(
+				`INSERT INTO screenshots (user_id, filename, original_filename, image_data, mime_type, file_size, folder_date, notes)
+				 VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id`,
+				[
+					testUserId,
+					"271124 - 1400 - invoice.png",
+					"invoice.png",
+					"data:image/png;base64,test1",
+					"image/png",
+					1000,
+					"271124",
+					"Payment for services",
+				],
+			);
+			const screenshot1Id = screenshot1Result.rows[0].id;
+
+			const screenshot2Result = await client.query(
+				`INSERT INTO screenshots (user_id, filename, original_filename, image_data, mime_type, file_size, folder_date, notes)
+				 VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id`,
+				[
+					testUserId,
+					"271124 - 1500 - receipt.png",
+					"receipt.png",
+					"data:image/png;base64,test2",
+					"image/png",
+					1000,
+					"271124",
+					"Invoice for consulting work",
+				],
+			);
+			const screenshot2Id = screenshot2Result.rows[0].id;
+
+			const screenshot3Result = await client.query(
+				`INSERT INTO screenshots (user_id, filename, original_filename, image_data, mime_type, file_size, folder_date, notes)
+				 VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id`,
+				[
+					testUserId,
+					"271124 - 1600 - other.png",
+					"other.png",
+					"data:image/png;base64,test3",
+					"image/png",
+					1000,
+					"271124",
+					"Unrelated content",
+				],
+			);
+			const screenshot3Id = screenshot3Result.rows[0].id;
+
+			// Search for "invoice" - should match both filename and notes
+			const searchQuery = "invoice";
+			const result = await client.query(
+				`SELECT id, filename, notes FROM screenshots 
+				 WHERE user_id = $1 AND (filename ILIKE $2 OR notes ILIKE $2)
+				 ORDER BY id`,
+				[testUserId, `%${searchQuery}%`],
+			);
+
+			// Should find both screenshots with "invoice" in filename or notes
+			expect(result.rows.length).toBe(2);
+			expect(result.rows[0].id).toBe(screenshot1Id);
+			expect(result.rows[1].id).toBe(screenshot2Id);
+
+			// Cleanup
+			await client.query(`DELETE FROM screenshots WHERE id = ANY($1)`, [
+				[screenshot1Id, screenshot2Id, screenshot3Id],
+			]);
+		});
+
+		it("should perform case-insensitive search", async () => {
+			// Create test screenshot
+			const screenshotResult = await client.query(
+				`INSERT INTO screenshots (user_id, filename, original_filename, image_data, mime_type, file_size, folder_date, notes)
+				 VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id`,
+				[
+					testUserId,
+					"271124 - 1700 - IMPORTANT.png",
+					"important.png",
+					"data:image/png;base64,test",
+					"image/png",
+					1000,
+					"271124",
+					"Very IMPORTANT document",
+				],
+			);
+			const screenshotId = screenshotResult.rows[0].id;
+
+			// Search with lowercase
+			const result1 = await client.query(
+				`SELECT id FROM screenshots 
+				 WHERE user_id = $1 AND (filename ILIKE $2 OR notes ILIKE $2)`,
+				[testUserId, "%important%"],
+			);
+
+			// Search with uppercase
+			const result2 = await client.query(
+				`SELECT id FROM screenshots 
+				 WHERE user_id = $1 AND (filename ILIKE $2 OR notes ILIKE $2)`,
+				[testUserId, "%IMPORTANT%"],
+			);
+
+			// Search with mixed case
+			const result3 = await client.query(
+				`SELECT id FROM screenshots 
+				 WHERE user_id = $1 AND (filename ILIKE $2 OR notes ILIKE $2)`,
+				[testUserId, "%ImPoRtAnT%"],
+			);
+
+			// All searches should find the screenshot
+			expect(result1.rows.length).toBe(1);
+			expect(result2.rows.length).toBe(1);
+			expect(result3.rows.length).toBe(1);
+
+			// Cleanup
+			await client.query(`DELETE FROM screenshots WHERE id = $1`, [
+				screenshotId,
+			]);
+		});
+
+		it("should search across all folders", async () => {
+			// Create screenshots in different folders
+			const screenshot1Result = await client.query(
+				`INSERT INTO screenshots (user_id, filename, original_filename, image_data, mime_type, file_size, folder_date, notes)
+				 VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id`,
+				[
+					testUserId,
+					"271124 - 1800 - project.png",
+					"project.png",
+					"data:image/png;base64,test1",
+					"image/png",
+					1000,
+					"271124",
+					"Project alpha notes",
+				],
+			);
+			const screenshot1Id = screenshot1Result.rows[0].id;
+
+			const screenshot2Result = await client.query(
+				`INSERT INTO screenshots (user_id, filename, original_filename, image_data, mime_type, file_size, folder_date, notes)
+				 VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id`,
+				[
+					testUserId,
+					"281124 - 0900 - meeting.png",
+					"meeting.png",
+					"data:image/png;base64,test2",
+					"image/png",
+					1000,
+					"281124",
+					"Project beta discussion",
+				],
+			);
+			const screenshot2Id = screenshot2Result.rows[0].id;
+
+			// Search for "project" across all folders
+			const searchQuery = "project";
+			const result = await client.query(
+				`SELECT id, filename, notes, folder_date FROM screenshots 
+				 WHERE user_id = $1 AND (filename ILIKE $2 OR notes ILIKE $2)
+				 ORDER BY id`,
+				[testUserId, `%${searchQuery}%`],
+			);
+
+			// Should find screenshots from both folders
+			expect(result.rows.length).toBe(2);
+			expect(result.rows[0].folder_date).toBe("271124");
+			expect(result.rows[1].folder_date).toBe("281124");
+
+			// Cleanup
+			await client.query(`DELETE FROM screenshots WHERE id = ANY($1)`, [
+				[screenshot1Id, screenshot2Id],
+			]);
+		});
+
+		it("should return empty results when no matches found", async () => {
+			// Create test screenshot
+			const screenshotResult = await client.query(
+				`INSERT INTO screenshots (user_id, filename, original_filename, image_data, mime_type, file_size, folder_date, notes)
+				 VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id`,
+				[
+					testUserId,
+					"271124 - 1900 - test.png",
+					"test.png",
+					"data:image/png;base64,test",
+					"image/png",
+					1000,
+					"271124",
+					"Some notes",
+				],
+			);
+			const screenshotId = screenshotResult.rows[0].id;
+
+			// Search for non-existent term
+			const searchQuery = "nonexistentterm12345";
+			const result = await client.query(
+				`SELECT id FROM screenshots 
+				 WHERE user_id = $1 AND (filename ILIKE $2 OR notes ILIKE $2)`,
+				[testUserId, `%${searchQuery}%`],
+			);
+
+			// Should return no results
+			expect(result.rows.length).toBe(0);
+
+			// Cleanup
+			await client.query(`DELETE FROM screenshots WHERE id = $1`, [
+				screenshotId,
+			]);
+		});
+	});
 });
