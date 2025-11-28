@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useSearch } from "@tanstack/react-router";
 import { useState, useEffect } from "react";
 import { FileExplorer } from "@/components/FileExplorer";
 import { ScreenshotUpload } from "@/components/ScreenshotUpload";
@@ -11,9 +11,16 @@ import { getUsers } from "@/server/users";
 
 export const Route = createFileRoute("/screenshots")({
 	component: ScreenshotsPage,
+	validateSearch: (search: Record<string, unknown>) => {
+		return {
+			query: (search.query as string) || undefined,
+			folder: (search.folder as string) || undefined,
+		};
+	},
 });
 
 function ScreenshotsPage() {
+	const searchParams = useSearch({ from: "/screenshots" });
 	// User profile selection
 	const [userId, setUserId] = useState<number | null>(null);
 	const [refreshKey, setRefreshKey] = useState(0);
@@ -109,7 +116,12 @@ function ScreenshotsPage() {
 
 				{/* File explorer */}
 				<div>
-					<FileExplorer key={refreshKey} userId={userId} onError={handleUploadError} />
+					<FileExplorer
+						key={refreshKey}
+						userId={userId}
+						initialSearchQuery={searchParams.query}
+						onError={handleUploadError}
+					/>
 				</div>
 			</div>
 

@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import { StickyNote, Trash2, Edit2 } from "lucide-react";
 import type { Screenshot } from "@/types/screenshot";
+import { highlightHashtagsClickable } from "@/utils/highlightHashtags";
 
 interface ScreenshotCardProps {
 	screenshot: Screenshot;
@@ -9,6 +10,7 @@ interface ScreenshotCardProps {
 	onRename: (id: number, newName: string) => void;
 	onDelete: (id: number) => void;
 	onView: (id: number) => void;
+	onHashtagClick?: (hashtag: string) => void;
 	selectionMode: boolean;
 }
 
@@ -19,6 +21,7 @@ export function ScreenshotCard({
 	onView,
 	onRename,
 	onDelete,
+	onHashtagClick,
 	selectionMode,
 }: ScreenshotCardProps) {
 	const [isRenaming, setIsRenaming] = useState(false);
@@ -202,20 +205,32 @@ export function ScreenshotCard({
 						/>
 					</div>
 				) : (
-					<div className="flex items-start justify-between gap-2">
-						<div className="flex-1 min-w-0">
-							<p className="text-sm font-medium text-white truncate">
-								{screenshot.filename}
-							</p>
-							<p className="text-xs text-white/60">
-								{formatDate(screenshot.uploadDate)}
-							</p>
+					<div className="space-y-1">
+						<div className="flex items-start justify-between gap-2">
+							<div className="flex-1 min-w-0">
+								<p className="text-sm font-medium text-white truncate">
+									{screenshot.filename}
+								</p>
+								<p className="text-xs text-white/60">
+									{formatDate(screenshot.uploadDate)}
+								</p>
+							</div>
+
+							{/* Notes indicator */}
+							{screenshot.notes && (
+								<div className="flex-shrink-0">
+									<StickyNote className="w-4 h-4 text-yellow-400" />
+								</div>
+							)}
 						</div>
 
-						{/* Notes indicator */}
-						{screenshot.notes && (
-							<div className="flex-shrink-0">
-								<StickyNote className="w-4 h-4 text-yellow-400" />
+						{/* Notes preview with clickable hashtags */}
+						{screenshot.notes && onHashtagClick && (
+							<div
+								className="text-xs text-white/80 line-clamp-2"
+								onClick={(e) => e.stopPropagation()}
+							>
+								{highlightHashtagsClickable(screenshot.notes, onHashtagClick)}
 							</div>
 						)}
 					</div>

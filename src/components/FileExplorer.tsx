@@ -12,12 +12,14 @@ import { retryWithBackoff } from "@/utils/retry";
 interface FileExplorerProps {
 	userId: number;
 	currentPath?: string;
+	initialSearchQuery?: string;
 	onError?: (message: string) => void;
 }
 
 export function FileExplorer({
 	userId,
 	currentPath,
+	initialSearchQuery,
 	onError,
 }: FileExplorerProps) {
 	const navigate = useNavigate();
@@ -33,7 +35,7 @@ export function FileExplorer({
 	const [viewingScreenshot, setViewingScreenshot] = useState<Screenshot | null>(
 		null,
 	);
-	const [searchQuery, setSearchQuery] = useState("");
+	const [searchQuery, setSearchQuery] = useState(initialSearchQuery || "");
 
 	// Load screenshots
 	useEffect(() => {
@@ -378,6 +380,12 @@ export function FileExplorer({
 		}
 	};
 
+	const handleHashtagClick = (hashtag: string) => {
+		// Trigger search with the clicked hashtag
+		setSearchQuery(hashtag);
+		setCurrentFolder(null);
+	};
+
 	const handleSelectFolder = (folderDate: string) => {
 		console.log('handleSelectFolder called with:', folderDate);
 		setSelectedFolders((prev) => {
@@ -693,6 +701,7 @@ export function FileExplorer({
 										onView={handleView}
 										onRename={handleRename}
 										onDelete={handleDelete}
+										onHashtagClick={handleHashtagClick}
 										selectionMode={selectionMode}
 									/>
 									{/* Folder indication */}
@@ -713,6 +722,7 @@ export function FileExplorer({
 						onClose={handleCloseViewer}
 						onNavigate={handleNavigateViewer}
 						onUpdate={handleViewerUpdate}
+						onHashtagClick={handleHashtagClick}
 					/>
 				)}
 			</div>
@@ -916,6 +926,7 @@ export function FileExplorer({
 									onView={handleView}
 									onRename={handleRename}
 									onDelete={handleDelete}
+									onHashtagClick={handleHashtagClick}
 									selectionMode={selectionMode}
 								/>
 							))}
@@ -932,6 +943,7 @@ export function FileExplorer({
 					onClose={handleCloseViewer}
 					onNavigate={handleNavigateViewer}
 					onUpdate={handleViewerUpdate}
+					onHashtagClick={handleHashtagClick}
 				/>
 			)}
 		</>

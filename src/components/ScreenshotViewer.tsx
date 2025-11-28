@@ -8,6 +8,7 @@ import { ToastContainer } from "@/components/Toast";
 import { EnhancedNotesInput } from "@/components/EnhancedNotesInput";
 import { TagHintBanner } from "@/components/TagHintBanner";
 import { KeyboardHint } from "@/components/KeyboardHint";
+import { highlightHashtagsClickable } from "@/utils/highlightHashtags";
 
 interface ScreenshotViewerProps {
 	screenshot: Screenshot;
@@ -15,6 +16,7 @@ interface ScreenshotViewerProps {
 	onClose: () => void;
 	onNavigate?: (direction: "prev" | "next") => void;
 	onUpdate?: (updatedScreenshot: Screenshot) => void;
+	onHashtagClick?: (hashtag: string) => void;
 }
 
 export function ScreenshotViewer({
@@ -23,6 +25,7 @@ export function ScreenshotViewer({
 	onClose,
 	onNavigate,
 	onUpdate,
+	onHashtagClick,
 }: ScreenshotViewerProps) {
 	const [notes, setNotes] = useState(screenshot.notes || "");
 	const [isSaving, setIsSaving] = useState(false);
@@ -222,6 +225,14 @@ export function ScreenshotViewer({
 		}
 	};
 
+	const handleHashtagClickInternal = (hashtag: string) => {
+		// Close viewer and trigger search
+		onClose();
+		if (onHashtagClick) {
+			onHashtagClick(hashtag);
+		}
+	};
+
 	return (
 		<>
 			<ToastContainer toasts={toast.toasts} onClose={toast.removeToast} />
@@ -317,6 +328,16 @@ export function ScreenshotViewer({
 					<div className="flex-1 p-4 flex flex-col overflow-y-auto">
 						{/* Tag hint banner */}
 						<TagHintBanner userId={screenshot.userId} />
+
+						{/* Saved notes display with clickable hashtags */}
+						{screenshot.notes && screenshot.notes.trim() && onHashtagClick && (
+							<div className="mb-4 p-3 bg-white/5 border border-white/10 rounded-lg">
+								<div className="text-xs text-white/60 mb-2">Saved notes:</div>
+								<div className="text-sm text-white/90 whitespace-pre-wrap">
+									{highlightHashtagsClickable(screenshot.notes, handleHashtagClickInternal)}
+								</div>
+							</div>
+						)}
 
 						{/* Enhanced notes input with hashtag support */}
 						<EnhancedNotesInput
