@@ -16,13 +16,18 @@ export const Route = createRootRoute({
         content: 'width=device-width, initial-scale=1',
       },
       {
-        title: 'TanStack Start Starter',
+        title: import.meta.env.VITE_APP_NAME || 'Receipts Tracker',
       },
     ],
     links: [
       {
         rel: 'stylesheet',
         href: appCss,
+      },
+      {
+        rel: 'icon',
+        type: 'image/x-icon',
+        href: import.meta.env.VITE_APP_FAVICON || '/favicon.ico',
       },
     ],
   }),

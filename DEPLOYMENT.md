@@ -476,8 +476,23 @@ After deployment:
 6. Set up monitoring and alerts
 7. Share the URL with your team!
 
+## App Branding
+
+You can customize the app name and favicon by setting environment variables in `.env.production`:
+
+```bash
+# App Branding (optional)
+VITE_APP_NAME="Your App Name"
+VITE_APP_FAVICON="/favicon.ico"
+```
+
+These are **build-time** variables (prefixed with `VITE_`), so they're baked into the build and don't need to be set as Cloudflare secrets. Just set them in `.env.production` before running `pnpm run deploy`.
+
+See [APP_BRANDING.md](./APP_BRANDING.md) for more details.
+
 ## Additional Resources
 
 - [OAuth Setup Guide](./OAUTH_SETUP.md) - Detailed Google OAuth configuration
 - [Gemini Integration](./GEMINI_INTEGRATION.md) - AI integration details
+- [App Branding](./APP_BRANDING.md) - Customize app name and favicon
 - [Migration Guide](./MIGRATION_GUIDE.md) - Upgrading from previous versions
