@@ -13,8 +13,9 @@ export const Route = createFileRoute("/screenshots")({
 	component: ScreenshotsPage,
 	validateSearch: (search: Record<string, unknown>) => {
 		return {
-			query: (search.query as string) || undefined,
+			query: search.query ? decodeURIComponent(search.query as string) : undefined,
 			folder: (search.folder as string) || undefined,
+			screenshot: search.screenshot ? Number(search.screenshot) : undefined,
 		};
 	},
 });
@@ -86,7 +87,9 @@ function ScreenshotsPage() {
 							<FileExplorer
 								key={refreshKey}
 								userId={user.id}
+								currentPath={searchParams.folder}
 								initialSearchQuery={searchParams.query}
+								initialScreenshotId={searchParams.screenshot}
 								onError={handleUploadError}
 							/>
 						</div>

@@ -16,7 +16,8 @@ export function extractHashtags(text: string): string[] {
  * Normalize a tag (remove # if present, convert to lowercase, trim)
  */
 export function normalizeTag(tag: string): string {
-	return tag.replace(/^#/, "").toLowerCase().trim();
+	// Trim first, then remove #, then lowercase
+	return tag.trim().replace(/^#/, "").toLowerCase();
 }
 
 /**

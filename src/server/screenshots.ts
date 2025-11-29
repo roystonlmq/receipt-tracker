@@ -389,6 +389,60 @@ export const updateScreenshotNotes = createServerFn({ method: "POST" })
 	});
 
 /**
+ * Get a single screenshot by ID
+ */
+export const getScreenshotById = createServerFn({ method: "GET" })
+	.inputValidator((input: { id: number; userId: number }) => input)
+	.handler(async ({ data }) => {
+		const { id, userId } = data;
+
+		// Validate inputs
+		if (!id || id <= 0) {
+			return { success: false, error: "Invalid screenshot ID" };
+		}
+		if (!userId || userId <= 0) {
+			return { success: false, error: "Invalid user ID" };
+		}
+
+		try {
+			const client = new Client({
+				connectionString: process.env.DATABASE_URL!,
+			});
+
+			try {
+				await client.connect();
+
+				const result = await client.query(
+					`SELECT id, user_id as "userId", filename, original_filename as "originalFilename",
+					        image_data as "imageData", mime_type as "mimeType", file_size as "fileSize",
+					        capture_date as "captureDate", upload_date as "uploadDate", notes,
+					        folder_date as "folderDate", created_at as "createdAt", updated_at as "updatedAt"
+					 FROM screenshots
+					 WHERE id = $1 AND user_id = $2`,
+					[id, userId],
+				);
+
+				if (result.rows.length === 0) {
+					return {
+						success: false,
+						error: "Screenshot not found or access denied",
+					};
+				}
+
+				return { success: true, screenshot: result.rows[0] };
+			} finally {
+				await client.end();
+			}
+		} catch (error) {
+			console.error("Failed to get screenshot by ID:", error);
+			return {
+				success: false,
+				error: "Failed to load screenshot. Please try again.",
+			};
+		}
+	});
+
+/**
  * Batch delete multiple screenshots
  */
 export const batchDeleteScreenshots = createServerFn({ method: "POST" })

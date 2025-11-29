@@ -51,6 +51,7 @@
     "@types/textarea-caret": "^3.0.4",
     "@vitejs/plugin-react": "^5.0.4",
     "dotenv": "^16.0.0",
+    "fast-check": "^4.3.0",
     "jsdom": "^27.0.0",
     "tsx": "^4.0.0",
     "typescript": "^5.7.2",

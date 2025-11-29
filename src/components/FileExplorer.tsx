@@ -6,13 +6,14 @@ import { ScreenshotCard } from "./ScreenshotCard";
 import { ScreenshotViewer } from "./ScreenshotViewer";
 import { SearchBar } from "./SearchBar";
 import { formatFolderDate } from "@/utils/filename";
-import { getScreenshots, downloadScreenshotWithNotes } from "@/server/screenshots";
+import { getScreenshots, downloadScreenshotWithNotes, getScreenshotById } from "@/server/screenshots";
 import { retryWithBackoff } from "@/utils/retry";
 
 interface FileExplorerProps {
 	userId: number;
 	currentPath?: string;
 	initialSearchQuery?: string;
+	initialScreenshotId?: number;
 	onError?: (message: string) => void;
 }
 
@@ -20,6 +21,7 @@ export function FileExplorer({
 	userId,
 	currentPath,
 	initialSearchQuery,
+	initialScreenshotId,
 	onError,
 }: FileExplorerProps) {
 	const navigate = useNavigate();
@@ -37,10 +39,67 @@ export function FileExplorer({
 	);
 	const [searchQuery, setSearchQuery] = useState(initialSearchQuery || "");
 
+	// Update search query when initialSearchQuery changes (e.g., from URL navigation)
+	useEffect(() => {
+		if (initialSearchQuery !== undefined) {
+			setSearchQuery(initialSearchQuery);
+		}
+	}, [initialSearchQuery]);
+
 	// Load screenshots
 	useEffect(() => {
 		loadScreenshots();
 	}, [userId, currentFolder, searchQuery]);
+
+	// Auto-open screenshot from URL
+	useEffect(() => {
+		if (!initialScreenshotId || screenshots.length === 0) return;
+
+		// Check if screenshot is in current list
+		const screenshot = screenshots.find((s) => s.id === initialScreenshotId);
+		
+		if (screenshot) {
+			// Screenshot found in current list, open it
+			setViewingScreenshot(screenshot);
+		} else {
+			// Screenshot not in current list, fetch it
+			const fetchScreenshot = async () => {
+				try {
+					const result = await getScreenshotById({
+						data: { id: initialScreenshotId, userId },
+					});
+
+					if (result.success && result.screenshot) {
+						setViewingScreenshot(result.screenshot);
+					} else {
+						// Screenshot not found or access denied
+						onError?.(result.error || "Screenshot not found");
+						// Remove invalid screenshot parameter from URL
+						navigate({
+							to: "/screenshots",
+							search: (prev: any) => {
+								const { screenshot, ...rest } = prev;
+								return rest;
+							},
+						});
+					}
+				} catch (error) {
+					console.error("Failed to fetch screenshot:", error);
+					onError?.("Failed to load screenshot");
+					// Remove invalid screenshot parameter from URL
+					navigate({
+						to: "/screenshots",
+						search: (prev: any) => {
+							const { screenshot, ...rest } = prev;
+							return rest;
+						},
+					});
+				}
+			};
+
+			fetchScreenshot();
+		}
+	}, [initialScreenshotId, screenshots, userId]);
 
 	// Handle keyboard shortcuts
 	useEffect(() => {
@@ -383,6 +442,7 @@ export function FileExplorer({
 	const handleHashtagClick = (hashtag: string) => {
 		// Trigger search with the clicked hashtag
 		setSearchQuery(hashtag);
+		// Clear current folder when searching by hashtag
 		setCurrentFolder(null);
 	};
 
@@ -598,7 +658,7 @@ export function FileExplorer({
 	if (loading) {
 		return (
 			<div className="space-y-6">
-				<SearchBar onSearch={handleSearch} />
+				<SearchBar onSearch={handleSearch} initialValue={searchQuery} />
 				<div className="flex items-center justify-center py-12">
 					<Loader2 className="w-8 h-8 text-white/60 animate-spin" />
 				</div>
@@ -678,7 +738,7 @@ export function FileExplorer({
 	if (searchQuery) {
 		return (
 			<div className="space-y-6">
-				<SearchBar onSearch={handleSearch} resultsCount={screenshots.length} />
+				<SearchBar onSearch={handleSearch} resultsCount={screenshots.length} initialValue={searchQuery} />
 				<Toolbar />
 
 				{screenshots.length === 0 ? (
@@ -734,7 +794,7 @@ export function FileExplorer({
 		if (folders.length === 0) {
 			return (
 				<div className="space-y-6">
-					<SearchBar onSearch={handleSearch} />
+					<SearchBar onSearch={handleSearch} initialValue={searchQuery} />
 					<div className="text-center py-12">
 						<Folder className="w-16 h-16 text-white/20 mx-auto mb-4" />
 						<p className="text-white/60">No screenshots yet</p>
@@ -748,7 +808,7 @@ export function FileExplorer({
 
 		return (
 			<div className="space-y-6">
-				<SearchBar onSearch={handleSearch} />
+				<SearchBar onSearch={handleSearch} initialValue={searchQuery} />
 
 				{/* Folder Selection Toolbar - matches screenshot toolbar design */}
 				<div className="bg-white/5 border border-white/10 rounded-lg p-4 flex items-center justify-between">
@@ -880,7 +940,7 @@ export function FileExplorer({
 	return (
 		<>
 			<div className="space-y-6">
-				<SearchBar onSearch={handleSearch} />
+				<SearchBar onSearch={handleSearch} initialValue={searchQuery} />
 				<Toolbar />
 
 				<div className="space-y-4">

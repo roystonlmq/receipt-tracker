@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { X, ChevronLeft, ChevronRight, Download, Save, Sparkles } from "lucide-react";
+import { useNavigate } from "@tanstack/react-router";
 import type { Screenshot } from "@/types/screenshot";
 import { updateScreenshotNotes, downloadScreenshotWithNotes } from "@/server/screenshots";
 import { downloadFile } from "@/utils/fileSystem";
@@ -39,6 +40,7 @@ export function ScreenshotViewer({
 	const [showDiscardDialog, setShowDiscardDialog] = useState(false);
 	const [pendingAction, setPendingAction] = useState<"close" | "cancel" | null>(null);
 	const toast = useToast();
+	const navigate = useNavigate();
 
 	// Check AI availability on mount
 	useEffect(() => {
@@ -51,6 +53,19 @@ export function ScreenshotViewer({
 	useEffect(() => {
 		setNotes(screenshot.notes || "");
 	}, [screenshot.id, screenshot.notes]);
+
+	// Update URL when viewer opens or screenshot changes
+	useEffect(() => {
+		// Add screenshot ID to URL
+		navigate({
+			to: "/screenshots",
+			search: (prev: any) => ({
+				...prev,
+				screenshot: String(screenshot.id),
+			}),
+			replace: false, // Add to history for back button
+		});
+	}, [screenshot.id]);
 
 	const hasUnsavedChanges = () => notes !== (screenshot.notes || "");
 
@@ -70,6 +85,15 @@ export function ScreenshotViewer({
 			setPendingAction("close");
 			setShowDiscardDialog(true);
 		} else {
+			// Remove screenshot parameter from URL
+			navigate({
+				to: "/screenshots",
+				search: (prev: any) => {
+					const { screenshot, ...rest } = prev;
+					return rest;
+				},
+				replace: false, // Add to history for back button
+			});
 			onClose();
 		}
 	};
@@ -78,6 +102,15 @@ export function ScreenshotViewer({
 		setShowDiscardDialog(false);
 		
 		if (pendingAction === "close") {
+			// Remove screenshot parameter from URL
+			navigate({
+				to: "/screenshots",
+				search: (prev: any) => {
+					const { screenshot, ...rest } = prev;
+					return rest;
+				},
+				replace: false,
+			});
 			onClose();
 		} else if (pendingAction === "cancel") {
 			setIsEditMode(false);
@@ -108,9 +141,33 @@ export function ScreenshotViewer({
 					handleClose();
 				}
 			} else if (e.key === "ArrowLeft" && onNavigate && !isTyping) {
-				onNavigate("prev");
+				if (hasPrev) {
+					const prevScreenshot = allScreenshots[currentIndex - 1];
+					// Update URL with new screenshot ID
+					navigate({
+						to: "/screenshots",
+						search: (prev: any) => ({
+							...prev,
+							screenshot: String(prevScreenshot.id),
+						}),
+						replace: true, // Replace history for navigation
+					});
+					onNavigate("prev");
+				}
 			} else if (e.key === "ArrowRight" && onNavigate && !isTyping) {
-				onNavigate("next");
+				if (hasNext) {
+					const nextScreenshot = allScreenshots[currentIndex + 1];
+					// Update URL with new screenshot ID
+					navigate({
+						to: "/screenshots",
+						search: (prev: any) => ({
+							...prev,
+							screenshot: String(nextScreenshot.id),
+						}),
+						replace: true, // Replace history for navigation
+					});
+					onNavigate("next");
+				}
 			} else if (e.key.toLowerCase() === "e" && !isTyping && !e.ctrlKey && !e.metaKey && !isEditMode) {
 				// Press 'E' to enter edit mode
 				e.preventDefault();
@@ -144,8 +201,8 @@ export function ScreenshotViewer({
 		setSaveSuccess(false);
 
 		try {
-			// Save to server
-			await updateScreenshotNotes({
+			// Save to server and get the updated screenshot back
+			const result = await updateScreenshotNotes({
 				data: {
 					id: screenshot.id,
 					userId: screenshot.userId,
@@ -161,13 +218,9 @@ export function ScreenshotViewer({
 			// Exit edit mode after successful save
 			setIsEditMode(false);
 
-			// Optimistically update the parent with the new notes
-			if (onUpdate) {
-				onUpdate({
-					...screenshot,
-					notes,
-					updatedAt: new Date(), // Update the timestamp
-				});
+			// Use the screenshot returned from the server (includes actual updated_at timestamp)
+			if (result.success && result.screenshot && onUpdate) {
+				onUpdate(result.screenshot);
 			}
 		} catch (error) {
 			console.error("Failed to save notes:", error);
@@ -407,7 +460,19 @@ export function ScreenshotViewer({
 					{hasPrev && onNavigate && (
 						<button
 							type="button"
-							onClick={() => onNavigate("prev")}
+							onClick={() => {
+								const prevScreenshot = allScreenshots[currentIndex - 1];
+								// Update URL with new screenshot ID
+								navigate({
+									to: "/screenshots",
+									search: (prev: any) => ({
+										...prev,
+										screenshot: String(prevScreenshot.id),
+									}),
+									replace: true,
+								});
+								onNavigate("prev");
+							}}
 							className="absolute left-4 top-1/2 -translate-y-1/2 p-3 bg-black/50 hover:bg-black/70 rounded-full transition-colors group"
 							aria-label="Previous screenshot (Left arrow key)"
 						>
@@ -421,7 +486,19 @@ export function ScreenshotViewer({
 					{hasNext && onNavigate && (
 						<button
 							type="button"
-							onClick={() => onNavigate("next")}
+							onClick={() => {
+								const nextScreenshot = allScreenshots[currentIndex + 1];
+								// Update URL with new screenshot ID
+								navigate({
+									to: "/screenshots",
+									search: (prev: any) => ({
+										...prev,
+										screenshot: String(nextScreenshot.id),
+									}),
+									replace: true,
+								});
+								onNavigate("next");
+							}}
 							className="absolute right-4 top-1/2 -translate-y-1/2 p-3 bg-black/50 hover:bg-black/70 rounded-full transition-colors group"
 							aria-label="Next screenshot (Right arrow key)"
 						>

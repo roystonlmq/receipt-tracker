@@ -6,16 +6,26 @@ interface SearchBarProps {
 	onSearch: (query: string) => void;
 	placeholder?: string;
 	resultsCount?: number;
+	initialValue?: string;
 }
 
 export function SearchBar({
 	onSearch,
 	placeholder = "Search screenshots...",
 	resultsCount,
+	initialValue = "",
 }: SearchBarProps) {
-	const [query, setQuery] = useState("");
-	const [debouncedQuery, setDebouncedQuery] = useState("");
+	const [query, setQuery] = useState(initialValue);
+	const [debouncedQuery, setDebouncedQuery] = useState(initialValue);
 	const inputRef = useRef<HTMLInputElement>(null);
+
+	// Update query when initialValue changes (e.g., from URL navigation)
+	useEffect(() => {
+		if (initialValue !== undefined) {
+			setQuery(initialValue);
+			setDebouncedQuery(initialValue);
+		}
+	}, [initialValue]);
 
 	// Debounce search input (500ms delay)
 	useEffect(() => {
