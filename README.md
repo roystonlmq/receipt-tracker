@@ -18,13 +18,19 @@ The application uses a standardized filename format for all screenshots:
 ## Features
 * Upload screenshots (with drag-and-drop, file picker, or clipboard paste)
 * View screenshots with full-screen viewer
-* Add and edit notes for screenshots
+* Add and edit notes for screenshots with hashtag support (#tags)
+* **AI-powered note generation** (optional, requires API key)
+  - Automatically generate descriptive notes from screenshot content
+  - Suggests relevant hashtags based on your usage patterns
+  - Supports OpenAI (GPT-4o-mini) and Anthropic (Claude 3.5 Sonnet)
+* Tag-based organization and search
+* Autocomplete suggestions for previously used hashtags
 * Download screenshots with notes as text files
 * Rename screenshots
 * Delete screenshots (single or batch)
 * Screenshots are stored persistently in PostgreSQL database
 * File explorer/folder navigation tool that auto-organizes screenshots based on DDMMYY prefix
-* Search screenshots by name across all folders
+* Search screenshots by name or hashtags across all folders
 * Multi-user profiles with isolated screenshot storage
 
 ## Technical Architecture
@@ -125,6 +131,24 @@ pnpm install
    ```bash
    pnpm tsx scripts/seed.ts
    ```
+
+## AI Configuration (Optional)
+
+To enable AI-powered note generation, add one of the following to your `.env.local`:
+
+### Option 1: OpenAI
+```bash
+OPENAI_API_KEY="sk-..."
+OPENAI_MODEL="gpt-4o-mini"  # Optional, defaults to gpt-4o-mini
+```
+
+### Option 2: Anthropic Claude
+```bash
+ANTHROPIC_API_KEY="sk-ant-..."
+ANTHROPIC_MODEL="claude-3-5-sonnet-20241022"  # Optional
+```
+
+When configured, a "Generate with AI" button will appear in the screenshot viewer, allowing you to automatically generate descriptive notes with relevant hashtags.
 
 The seed script creates:
 - Two test users (test@example.com and demo@example.com)

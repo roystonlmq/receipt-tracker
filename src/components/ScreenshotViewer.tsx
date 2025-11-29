@@ -1,14 +1,16 @@
 import { useState, useEffect } from "react";
-import { X, ChevronLeft, ChevronRight, Download, Save } from "lucide-react";
+import { X, ChevronLeft, ChevronRight, Download, Save, Sparkles } from "lucide-react";
 import type { Screenshot } from "@/types/screenshot";
 import { updateScreenshotNotes, downloadScreenshotWithNotes } from "@/server/screenshots";
 import { downloadFile } from "@/utils/fileSystem";
 import { useToast } from "@/hooks/useToast";
 import { ToastContainer } from "@/components/Toast";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { EnhancedNotesInput } from "@/components/EnhancedNotesInput";
 import { TagHintBanner } from "@/components/TagHintBanner";
 import { KeyboardHint } from "@/components/KeyboardHint";
 import { highlightHashtagsClickable } from "@/utils/highlightHashtags";
+import { generateNotesWithAI, checkAIAvailability } from "@/server/ai";
 
 interface ScreenshotViewerProps {
 	screenshot: Screenshot;
@@ -32,28 +34,65 @@ export function ScreenshotViewer({
 	const [isDownloading, setIsDownloading] = useState(false);
 	const [saveSuccess, setSaveSuccess] = useState(false);
 	const [isEditMode, setIsEditMode] = useState(false);
+	const [isGeneratingAI, setIsGeneratingAI] = useState(false);
+	const [aiAvailable, setAiAvailable] = useState(false);
+	const [showDiscardDialog, setShowDiscardDialog] = useState(false);
+	const [pendingAction, setPendingAction] = useState<"close" | "cancel" | null>(null);
 	const toast = useToast();
+
+	// Check AI availability on mount
+	useEffect(() => {
+		checkAIAvailability({ data: undefined })
+			.then((result) => setAiAvailable(result.available))
+			.catch(() => setAiAvailable(false));
+	}, []);
 
 	// Update notes when screenshot changes
 	useEffect(() => {
 		setNotes(screenshot.notes || "");
 	}, [screenshot.id, screenshot.notes]);
 
+	const hasUnsavedChanges = () => notes !== (screenshot.notes || "");
+
 	const handleCancelEdit = () => {
-		const hasUnsavedChanges = notes !== (screenshot.notes || "");
+		if (hasUnsavedChanges()) {
+			setPendingAction("cancel");
+			setShowDiscardDialog(true);
+		} else {
+			// No unsaved changes, just exit edit mode
+			setIsEditMode(false);
+			setNotes(screenshot.notes || "");
+		}
+	};
+
+	const handleClose = () => {
+		console.log("[handleClose] isEditMode:", isEditMode, "hasUnsavedChanges:", hasUnsavedChanges());
+		if (isEditMode && hasUnsavedChanges()) {
+			console.log("[handleClose] Showing discard dialog");
+			setPendingAction("close");
+			setShowDiscardDialog(true);
+		} else {
+			console.log("[handleClose] Closing without dialog");
+			onClose();
+		}
+	};
+
+	const handleDiscardConfirm = () => {
+		setShowDiscardDialog(false);
 		
-		if (hasUnsavedChanges) {
-			const shouldDiscard = window.confirm(
-				"You have unsaved changes. Do you want to discard them?"
-			);
-			if (!shouldDiscard) {
-				return; // User wants to keep editing
-			}
+		if (pendingAction === "close") {
+			onClose();
+		} else if (pendingAction === "cancel") {
+			setIsEditMode(false);
+			setNotes(screenshot.notes || "");
 		}
 		
-		// Exit edit mode and reset notes
-		setIsEditMode(false);
-		setNotes(screenshot.notes || "");
+		setPendingAction(null);
+	};
+
+	const handleDiscardCancel = () => {
+		setShowDiscardDialog(false);
+		setPendingAction(null);
 	};
 
 	// Handle keyboard shortcuts
@@ -63,13 +102,13 @@ export function ScreenshotViewer({
 			const isTyping = document.activeElement?.tagName === "TEXTAREA";
 			
 			if (e.key === "Escape") {
+				e.preventDefault();
 				if (isEditMode) {
 					// Exit edit mode with confirmation if there are unsaved changes
-					e.preventDefault();
 					handleCancelEdit();
 				} else {
-					// Close viewer
-					onClose();
+					// Close viewer with confirmation if there are unsaved changes
+					handleClose();
 				}
 			} else if (e.key === "ArrowLeft" && onNavigate && !isTyping) {
 				onNavigate("prev");
@@ -156,6 +195,47 @@ export function ScreenshotViewer({
 			}
 		} finally {
 			setIsSaving(false);
+		}
+	};
+
+	const handleGenerateWithAI = async () => {
+		setIsGeneratingAI(true);
+
+		try {
+			const result = await generateNotesWithAI({
+				data: {
+					screenshotId: screenshot.id,
+					userId: screenshot.userId,
+				},
+			});
+
+			if (result.success && result.notes) {
+				// Append to existing notes instead of replacing
+				const existingNotes = notes.trim();
+				const generatedNotes = result.notes.trim();
+				
+				if (existingNotes) {
+					// Add a separator and append
+					setNotes(`${existingNotes}\n\n---\n\n${generatedNotes}`);
+				} else {
+					// No existing notes, just set the generated ones
+					setNotes(generatedNotes);
+				}
+				
+				toast.success(
+					`Notes generated with ${result.provider}! ${result.tokensUsed ? `(${result.tokensUsed} tokens)` : ""}`,
+				);
+				
+				// Enter edit mode so user can review/edit the generated notes
+				setIsEditMode(true);
+			} else {
+				toast.error(result.error || "Failed to generate notes", 7000);
+			}
+		} catch (error) {
+			console.error("Failed to generate notes with AI:", error);
+			toast.error("Failed to generate notes. Please try again.", 5000);
+		} finally {
+			setIsGeneratingAI(false);
 		}
 	};
 
@@ -271,6 +351,15 @@ export function ScreenshotViewer({
 	return (
 		<>
 			<ToastContainer toasts={toast.toasts} onClose={toast.removeToast} />
+			<ConfirmDialog
+				isOpen={showDiscardDialog}
+				title="Discard Changes?"
+				message="You have unsaved changes. Do you want to discard them?"
+				confirmText="Discard"
+				cancelText="Keep Editing"
+				onConfirm={handleDiscardConfirm}
+				onCancel={handleDiscardCancel}
+			/>
 			<div className="fixed inset-0 z-50 bg-black/95 flex flex-col" onClick={handleBackdropClick}>
 			{/* Header */}
 			<div className="flex items-center justify-between p-4 bg-black/50 border-b border-white/10" onClick={(e) => e.stopPropagation()}>
@@ -303,7 +392,7 @@ export function ScreenshotViewer({
 					{/* Close button with ESC hint */}
 					<button
 						type="button"
-						onClick={onClose}
+						onClick={handleClose}
 						className="flex items-center gap-2 p-2 hover:bg-white/10 rounded-lg transition-colors group"
 						aria-label="Close viewer (Escape key)"
 					>
@@ -385,16 +474,29 @@ export function ScreenshotViewer({
 									</div>
 								) : (
 									<div className="flex-1 flex items-center justify-center">
-										<div className="text-center">
+										<div className="text-center space-y-3">
 											<p className="text-white/40 mb-3">No notes yet</p>
-											<button
-												type="button"
-												onClick={() => setIsEditMode(true)}
-												className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors mx-auto"
-											>
-												Add Notes
-												<KeyboardHint keys="E" variant="compact" className="opacity-70" />
-											</button>
+											<div className="flex flex-col gap-2">
+												{aiAvailable && (
+													<button
+														type="button"
+														onClick={handleGenerateWithAI}
+														disabled={isGeneratingAI}
+														className="flex items-center justify-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 disabled:from-purple-600/50 disabled:to-blue-600/50 text-white rounded-lg transition-colors"
+													>
+														<Sparkles className="w-4 h-4" />
+														{isGeneratingAI ? "Generating..." : "Generate with AI"}
+													</button>
+												)}
+												<button
+													type="button"
+													onClick={() => setIsEditMode(true)}
+													className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors mx-auto"
+												>
+													Add Notes Manually
+													<KeyboardHint keys="E" variant="compact" className="opacity-70" />
+												</button>
+											</div>
 										</div>
 									</div>
 								)}
@@ -410,6 +512,19 @@ export function ScreenshotViewer({
 							<>
 								{/* Tag hint banner */}
 								<TagHintBanner userId={screenshot.userId} />
+
+								{/* AI Generate button */}
+								{aiAvailable && (
+									<button
+										type="button"
+										onClick={handleGenerateWithAI}
+										disabled={isGeneratingAI}
+										className="mb-3 flex items-center justify-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 disabled:from-purple-600/50 disabled:to-blue-600/50 text-white rounded-lg transition-colors"
+									>
+										<Sparkles className="w-4 h-4" />
+										{isGeneratingAI ? "Generating..." : "Generate with AI"}
+									</button>
+								)}
 
 								{/* Enhanced notes input with hashtag support */}
 								<EnhancedNotesInput
