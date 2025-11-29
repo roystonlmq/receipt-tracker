@@ -444,10 +444,10 @@ export function ScreenshotViewer({
 						type="button"
 						onClick={handleClose}
 						className="flex items-center gap-2 p-2 hover:bg-white/10 rounded-lg transition-colors group"
-						aria-label="Close viewer (Escape key)"
+						aria-label="Close viewer (ESC key)"
 					>
 						<X className="w-6 h-6 text-white" />
-						<KeyboardHint keys="Escape" variant="compact" className="opacity-60 group-hover:opacity-100 transition-opacity" />
+						<KeyboardHint keys="ESC" variant="compact" className="opacity-60 group-hover:opacity-100 transition-opacity" />
 					</button>
 				</div>
 			</div>
@@ -613,7 +613,7 @@ export function ScreenshotViewer({
 
 								<div className="px-4 pb-4 pt-2 text-xs text-white/40 space-y-1 flex-shrink-0">
 									<div>Press <KeyboardHint keys={["Cmd", "S"]} variant="inline" /> to save</div>
-									<div>Press <KeyboardHint keys="Escape" variant="inline" /> to cancel</div>
+									<div>Press <KeyboardHint keys="ESC" variant="inline" /> to cancel</div>
 								</div>
 							</>
 						)}
