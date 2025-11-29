@@ -50,7 +50,9 @@ function ScreenshotsPage() {
 	};
 
 	const handleUpdateScreenshot = (updatedScreenshot: Screenshot) => {
-		// Refresh to show updated screenshot
+		// Update the viewing screenshot with the new data
+		setViewingScreenshot(updatedScreenshot);
+		// Refresh to show updated screenshot in the list
 		setRefreshKey((prev) => prev + 1);
 	};
 
