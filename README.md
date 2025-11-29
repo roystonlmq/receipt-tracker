@@ -132,6 +132,40 @@ pnpm install
    pnpm tsx scripts/seed.ts
    ```
 
+## Authentication Setup
+
+The application uses Google OAuth for secure authentication. You have two options:
+
+### Option 1: Development Mode (Quick Start)
+
+For local development without OAuth setup, use development mode:
+
+```bash
+# .env.local
+DEV_MODE="true"
+DEV_USER_ID="1"
+```
+
+**Warning**: Never use development mode in production!
+
+### Option 2: Google OAuth (Production)
+
+For production or to test the full authentication flow:
+
+1. Set up Google OAuth credentials (see [OAUTH_SETUP.md](./OAUTH_SETUP.md) for detailed instructions)
+2. Add to your `.env.local`:
+   ```bash
+   GOOGLE_CLIENT_ID="your-client-id.apps.googleusercontent.com"
+   GOOGLE_CLIENT_SECRET="your-client-secret"
+   GOOGLE_REDIRECT_URI="http://localhost:3000/auth/callback"
+   ```
+
+See [OAUTH_SETUP.md](./OAUTH_SETUP.md) for complete setup instructions including:
+- Creating a Google Cloud project
+- Configuring OAuth consent screen
+- Setting up authorized redirect URIs
+- Production deployment considerations
+
 ## AI Configuration (Optional)
 
 To enable AI-powered note generation, add one of the following to your `.env.local`:

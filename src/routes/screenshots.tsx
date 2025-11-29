@@ -1,13 +1,13 @@
 import { createFileRoute, useSearch } from "@tanstack/react-router";
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { FileExplorer } from "@/components/FileExplorer";
 import { ScreenshotUpload } from "@/components/ScreenshotUpload";
 import { ScreenshotViewer } from "@/components/ScreenshotViewer";
 import { ToastContainer } from "@/components/Toast";
-import { UserProfileSelector } from "@/components/UserProfileSelector";
+import { AuthGuard } from "@/components/AuthGuard";
+import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/useToast";
 import type { Screenshot } from "@/types/screenshot";
-import { getUsers } from "@/server/users";
 
 export const Route = createFileRoute("/screenshots")({
 	component: ScreenshotsPage,
@@ -21,27 +21,10 @@ export const Route = createFileRoute("/screenshots")({
 
 function ScreenshotsPage() {
 	const searchParams = useSearch({ from: "/screenshots" });
-	// User profile selection
-	const [userId, setUserId] = useState<number | null>(null);
+	const { user } = useAuth();
 	const [refreshKey, setRefreshKey] = useState(0);
 	const [viewingScreenshot, setViewingScreenshot] = useState<Screenshot | null>(null);
 	const { toasts, removeToast, success, error } = useToast();
-
-	// Load first available user on mount
-	useEffect(() => {
-		const loadInitialUser = async () => {
-			try {
-				const users = await getUsers();
-				if (users.length > 0) {
-					setUserId(users[0].id);
-				}
-			} catch (err) {
-				console.error("Failed to load users:", err);
-				error("Failed to load user profiles");
-			}
-		};
-		loadInitialUser();
-	}, []);
 
 	const handleUploadComplete = (screenshots: Screenshot[]) => {
 		console.log("Uploaded screenshots:", screenshots);
@@ -57,11 +40,6 @@ function ScreenshotsPage() {
 		success(message);
 	};
 
-	const handleUserChange = (newUserId: number) => {
-		setUserId(newUserId);
-		setRefreshKey((prev) => prev + 1); // Refresh to load new user's screenshots
-	};
-
 	const handleViewScreenshot = (screenshot: Screenshot) => {
 		setViewingScreenshot(screenshot);
 	};
@@ -75,67 +53,58 @@ function ScreenshotsPage() {
 		setRefreshKey((prev) => prev + 1);
 	};
 
-	// Don't render until we have a userId
-	if (userId === null) {
-		return (
-			<div className="min-h-screen bg-gradient-to-br from-zinc-900 via-zinc-800 to-black flex items-center justify-center">
-				<div className="text-white/60">Loading...</div>
-			</div>
-		);
-	}
-
 	return (
-		<div className="min-h-screen bg-gradient-to-br from-zinc-900 via-zinc-800 to-black">
-			<div className="container mx-auto px-4 py-8">
-				{/* Header */}
-				<div className="mb-8 flex items-start justify-between">
-					<div>
+		<AuthGuard>
+			<div className="min-h-screen bg-gradient-to-br from-zinc-900 via-zinc-800 to-black">
+				<div className="container mx-auto px-4 py-8">
+					{/* Header */}
+					<div className="mb-8">
 						<h1 className="text-3xl font-bold text-white mb-2">
-							Receipts Tracker
+							My Screenshots
 						</h1>
 						<p className="text-white/60">
 							Manage your screenshots and receipts
 						</p>
 					</div>
-					<UserProfileSelector
-						currentUserId={userId}
-						onUserChange={handleUserChange}
-					/>
+
+					{/* Upload section */}
+					{user && (
+						<div className="mb-8">
+							<ScreenshotUpload
+								userId={user.id}
+								onUploadComplete={handleUploadComplete}
+								onViewScreenshot={handleViewScreenshot}
+								onError={handleUploadError}
+								onSuccess={handleUploadSuccess}
+							/>
+						</div>
+					)}
+
+					{/* File explorer */}
+					{user && (
+						<div>
+							<FileExplorer
+								key={refreshKey}
+								userId={user.id}
+								initialSearchQuery={searchParams.query}
+								onError={handleUploadError}
+							/>
+						</div>
+					)}
 				</div>
 
-				{/* Upload section */}
-				<div className="mb-8">
-					<ScreenshotUpload
-						userId={userId}
-						onUploadComplete={handleUploadComplete}
-						onViewScreenshot={handleViewScreenshot}
-						onError={handleUploadError}
-						onSuccess={handleUploadSuccess}
-					/>
-				</div>
+				{/* Toast notifications */}
+				<ToastContainer toasts={toasts} onClose={removeToast} />
 
-				{/* File explorer */}
-				<div>
-					<FileExplorer
-						key={refreshKey}
-						userId={userId}
-						initialSearchQuery={searchParams.query}
-						onError={handleUploadError}
+				{/* Screenshot Viewer Modal */}
+				{viewingScreenshot && (
+					<ScreenshotViewer
+						screenshot={viewingScreenshot}
+						onClose={handleCloseViewer}
+						onUpdate={handleUpdateScreenshot}
 					/>
-				</div>
+				)}
 			</div>
-
-			{/* Toast notifications */}
-			<ToastContainer toasts={toasts} onClose={removeToast} />
-
-			{/* Screenshot Viewer Modal */}
-			{viewingScreenshot && (
-				<ScreenshotViewer
-					screenshot={viewingScreenshot}
-					onClose={handleCloseViewer}
-					onUpdate={handleUpdateScreenshot}
-				/>
-			)}
-		</div>
+		</AuthGuard>
 	);
 }

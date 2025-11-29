@@ -1,7 +1,8 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useState } from "react";
 import { TagList } from "@/components/TagList";
 import Header from "@/components/Header";
+import { AuthGuard } from "@/components/AuthGuard";
+import { useAuth } from "@/hooks/useAuth";
 
 export const Route = createFileRoute("/tags")({
 	component: TagsPage,
@@ -9,7 +10,7 @@ export const Route = createFileRoute("/tags")({
 
 function TagsPage() {
 	const navigate = useNavigate();
-	const [userId] = useState(1); // TODO: Get from auth context
+	const { user } = useAuth();
 
 	const handleTagClick = (tag: string) => {
 		// Navigate to screenshots page with tag search
@@ -20,7 +21,8 @@ function TagsPage() {
 	};
 
 	return (
-		<div className="min-h-screen bg-gradient-to-br from-zinc-900 via-zinc-800 to-zinc-900">
+		<AuthGuard>
+			<div className="min-h-screen bg-gradient-to-br from-zinc-900 via-zinc-800 to-zinc-900">
 			<Header />
 
 			<main className="container mx-auto px-4 py-8">
@@ -32,8 +34,9 @@ function TagsPage() {
 					</p>
 				</div>
 
-				<TagList userId={userId} onTagClick={handleTagClick} />
+				<TagList userId={user?.id || 1} onTagClick={handleTagClick} />
 			</main>
 		</div>
+		</AuthGuard>
 	);
 }

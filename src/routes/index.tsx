@@ -1,11 +1,13 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { Receipt, Upload, Folder, Search, Download, Users } from "lucide-react";
+import { AuthGuard } from "@/components/AuthGuard";
 
 export const Route = createFileRoute("/")({ component: HomePage });
 
 function HomePage() {
 	return (
-		<div className="min-h-screen bg-gradient-to-br from-zinc-900 via-zinc-800 to-black">
+		<AuthGuard>
+			<div className="min-h-screen bg-gradient-to-br from-zinc-900 via-zinc-800 to-black">
 			<div className="container mx-auto px-4 py-16">
 				{/* Hero Section */}
 				<div className="text-center mb-16">
@@ -22,6 +24,7 @@ function HomePage() {
 					<div className="mt-8">
 						<Link
 							to="/screenshots"
+							search={{ query: undefined, folder: undefined }}
 							className="inline-flex items-center gap-2 px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white text-lg font-medium rounded-lg transition-colors"
 						>
 							Get Started
@@ -153,6 +156,7 @@ function HomePage() {
 					<div className="mt-8 text-center">
 						<Link
 							to="/screenshots"
+							search={{ query: undefined, folder: undefined }}
 							className="inline-flex items-center gap-2 px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors"
 						>
 							Go to My Screenshots
@@ -166,5 +170,6 @@ function HomePage() {
 				</div>
 			</div>
 		</div>
+		</AuthGuard>
 	);
 }

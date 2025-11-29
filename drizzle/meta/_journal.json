@@ -15,6 +15,13 @@
       "when": 1764335326327,
       "tag": "0001_huge_songbird",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1764399449207,
+      "tag": "0002_puzzling_blob",
+      "breakpoints": true
     }
   ]
 }
