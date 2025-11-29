@@ -17,7 +17,7 @@ Successfully integrated Google Gemini API as a third AI provider option alongsid
 ### 3. Environment Configuration
 Your `.env.local` is configured with:
 ```env
-GEMINI_API_KEY="AIzaSyCpJzXzdCZeBkjKH8tpzqwtuhe4s5ISZHk"
+GEMINI_API_KEY="xxx"
 GEMINI_MODEL="gemini-3-pro-preview"
 ```
 
