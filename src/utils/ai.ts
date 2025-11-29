@@ -56,25 +56,30 @@ export function isAIEnabled(): boolean {
 	return getAIConfig() !== null;
 }
 
-/**
+/** @
  * Build AI prompt for note generation
  */
 export function buildAIPrompt(userTags: string[]): string {
 	const tagContext =
 		userTags.length > 0
-			? `\n\nThe user frequently uses these tags: ${userTags.map((t) => `#${t}`).join(", ")}. Use them when relevant.`
+			? `\n\nTag suggestions (user's existing tags): ${userTags.map((t) => `#${t}`).join(", ")}`
 			: "";
 
-	return `You are analyzing a screenshot/receipt image. Generate concise, descriptive notes about what you see in the image.
+	return `You are analyzing a screenshot/receipt image. Generate descriptive notes in bullet point format.
 
-Focus on:
-- What type of document or content this is
-- Key information visible (amounts, dates, names, etc.)
-- Purpose or context of the screenshot
+Format your response as bullet points covering:
+- Type of document/content
+- People involved: If you detect any names (from conversations, emails, or visible in screenshot), write them as hashtags in lowercase (e.g., #adam, #bob, #charlie)
+- Key information (amounts, dates, locations, etc.)
+- If there are multiple items, specify the count and list each item
+- Purpose or context
 
-At the end of your notes, suggest 2-4 relevant hashtags for organization. Format hashtags as lowercase with hyphens (e.g., #project-name, #receipt, #invoice).${tagContext}
+IMPORTANT: When mentioning people, ALWAYS format their names as hashtags with lowercase letters and hyphens for spaces (e.g., #john-doe, #sarah, #mike-chen).
 
-Keep the notes brief (2-3 sentences) and actionable.`;
+At the very end, add a separate section:
+"Suggested tags: [list 2-3 additional relevant tags for project/category, without the # symbol]"${tagContext}
+
+Keep each bullet point concise and actionable.`;
 }
 
 /**

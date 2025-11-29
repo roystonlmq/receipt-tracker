@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { getTagSuggestions } from "@/server/tags";
 import type { TagSuggestion } from "@/server/tags";
-import { Hash } from "lucide-react";
+import { useCursorPosition } from "@/hooks/useCursorPosition";
 
 interface EnhancedNotesInputProps {
 	value: string;
@@ -23,9 +23,14 @@ export function EnhancedNotesInput({
 	const [showSuggestions, setShowSuggestions] = useState(false);
 	const [suggestions, setSuggestions] = useState<TagSuggestion[]>([]);
 	const [selectedIndex, setSelectedIndex] = useState(0);
-	const [currentHashtag, setCurrentHashtag] = useState<string | null>(null);
 	const textareaRef = useRef<HTMLTextAreaElement>(null);
 	const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+	// Use cursor position hook for smart dropdown positioning
+	const cursorPosition = useCursorPosition({
+		textareaRef,
+		enabled: showSuggestions && suggestions.length > 0,
+	});
 
 	// Auto-focus on mount if requested
 	useEffect(() => {
@@ -49,7 +54,6 @@ export function EnhancedNotesInput({
 
 			if (hashtagMatch) {
 				const query = hashtagMatch[1];
-				setCurrentHashtag(query);
 
 				// Debounce the suggestions fetch
 				if (debounceTimerRef.current) {
@@ -72,7 +76,6 @@ export function EnhancedNotesInput({
 				}, 100);
 			} else {
 				setShowSuggestions(false);
-				setCurrentHashtag(null);
 				setSuggestions([]);
 			}
 		},
@@ -187,7 +190,7 @@ export function EnhancedNotesInput({
 	}, []);
 
 	return (
-		<div className="relative">
+		<div className="relative h-full">
 			{/* Actual textarea */}
 			<textarea
 				ref={textareaRef}
@@ -195,14 +198,29 @@ export function EnhancedNotesInput({
 				onChange={handleInputChange}
 				onKeyDown={handleKeyDown}
 				placeholder={placeholder}
-				className={`w-full min-h-[120px] p-3 bg-white/5 border border-white/10 rounded-lg text-white/90 placeholder-white/40 focus:outline-none focus:ring-2 focus:ring-blue-500/50 resize-y ${className}`}
+				className={`w-full h-full p-3 bg-white/5 border border-white/10 rounded-lg text-white/90 placeholder-white/40 focus:outline-none focus:ring-2 focus:ring-blue-500/50 resize-none ${className}`}
 			/>
 
-			{/* Tag suggestions dropdown - positioned relative to textarea */}
-			{showSuggestions && suggestions.length > 0 && (
-				<div className="relative">
-					<div className="absolute left-0 top-1 z-50 w-64 bg-zinc-800 border border-white/10 rounded-lg shadow-lg max-h-60 overflow-y-auto">
-						<div className="p-2">
+			{/* Tag suggestions dropdown - cursor-following with fallback */}
+			{showSuggestions && suggestions.length > 0 && (() => {
+				// Use cursor position if available, otherwise fall back to bottom of textarea
+				const position = cursorPosition || (() => {
+					if (!textareaRef.current) return { top: 0, left: 0, placement: 'below' as const };
+					const rect = textareaRef.current.getBoundingClientRect();
+					return { top: rect.bottom + 4, left: rect.left, placement: 'below' as const };
+				})();
+
+				return (
+					<div 
+						className={`fixed z-[70] w-64 bg-zinc-800 border border-white/10 rounded-lg shadow-lg max-h-60 overflow-y-auto transition-all duration-150 ease-out animate-in fade-in ${
+							position.placement === 'above' ? '-translate-y-full -mt-2' : 'mt-2'
+						}`}
+						style={{
+							top: `${position.top}px`,
+							left: `${position.left}px`,
+						}}
+					>
+					<div className="p-2">
 							<div className="text-xs text-white/40 px-2 py-1 mb-1 flex items-center justify-between">
 								<span>Tag suggestions</span>
 								<span className="text-white/60">
@@ -236,8 +254,8 @@ export function EnhancedNotesInput({
 							))}
 						</div>
 					</div>
-				</div>
-			)}
+				);
+			})()}
 		</div>
 	);
 }

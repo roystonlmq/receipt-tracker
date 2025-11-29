@@ -1,519 +1,330 @@
-# Design Document: Screenshot Viewer UX Improvements
+# Design Document: Cursor-Following Tag Suggestions
 
 ## Overview
 
-This design implements contextual keyboard shortcut hints and cross-platform keyboard modifier detection for the Screenshot Viewer component. The current implementation places all keyboard hints in a bottom-left overlay that can be obscured by full-screen images, and hardcodes "Ctrl" regardless of the user's operating system. This design relocates hints to contextual positions near their associated actions and implements OS detection to display appropriate modifier keys (Cmd on macOS, Ctrl on Windows/Linux).
+This design implements cursor-following tag suggestions for the Screenshot Viewer's notes editor. The solution uses the `textarea-caret` npm package (a lightweight, battle-tested library) to calculate precise cursor coordinates, then positions a fixed-position dropdown at those coordinates. The implementation includes smart viewport boundary detection, smooth animations, performance optimizations, and graceful fallback to the current bottom-of-textarea approach.
 
 ## Architecture
 
-### High-Level Architecture
+### High-Level Flow
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                    ScreenshotViewer                          │
-│  ┌────────────────────────────────────────────────────────┐ │
-│  │ Header (with Close button + ESC hint)                  │ │
-│  │ Download button + Cmd/Ctrl+D hint                      │ │
-│  └────────────────────────────────────────────────────────┘ │
-│  ┌────────────────────────────────────────────────────────┐ │
-│  │ Image Viewer                                           │ │
-│  │  ┌──────┐                              ┌──────┐        │ │
-│  │  │ ← Prev│         [Image]             │Next →│        │ │
-│  │  └──────┘                              └──────┘        │ │
-│  └────────────────────────────────────────────────────────┘ │
-│  ┌────────────────────────────────────────────────────────┐ │
-│  │ Notes Panel                                            │ │
-│  │ Save hint: Cmd/Ctrl+S                                  │ │
-│  └────────────────────────────────────────────────────────┘ │
-└─────────────────────────────────────────────────────────────┘
+User types '#' → Detect hashtag → Calculate cursor position → Position dropdown → Show suggestions
+                                          ↓
+                                    If calculation fails
+                                          ↓
+                                  Fallback to bottom positioning
 ```
 
 ### Component Structure
 
-1. **Platform Detection Utility** (`src/utils/platform.ts`)
-   - Detects operating system on initialization
-   - Caches result for performance
-   - Provides utility functions for platform-specific behavior
-
-2. **Keyboard Shortcut Component** (`src/components/KeyboardHint.tsx`)
-   - Reusable component for displaying keyboard shortcuts
-   - Automatically uses correct modifier key based on platform
-   - Consistent styling across all instances
-
-3. **Updated ScreenshotViewer** (`src/components/ScreenshotViewer.tsx`)
-   - Removes bottom-left overlay
-   - Integrates contextual keyboard hints
-   - Uses platform detection for modifier keys
+```
+EnhancedNotesInput (existing)
+├── Textarea (existing)
+├── useCursorPosition (new hook)
+│   ├── getCaretCoordinates() from textarea-caret
+│   ├── Viewport boundary detection
+│   └── Fallback logic
+└── TagSuggestionsDropdown (existing, enhanced)
+    ├── Fixed positioning with calculated coordinates
+    ├── Smooth animations
+    └── Smart placement (below/above cursor)
+```
 
 ## Components and Interfaces
 
-### 1. Platform Detection Utility
+### 1. useCursorPosition Hook
 
-**File:** `src/utils/platform.ts`
+**Purpose:** Encapsulates cursor position calculation logic with fallback handling.
 
+**Interface:**
 ```typescript
-export type Platform = 'mac' | 'windows' | 'linux' | 'unknown';
-
-export interface PlatformInfo {
-  platform: Platform;
-  isMac: boolean;
-  isWindows: boolean;
-  isLinux: boolean;
-  modifierKey: 'Cmd' | 'Ctrl';
-  modifierSymbol: '⌘' | 'Ctrl';
+interface CursorPosition {
+  top: number;
+  left: number;
+  placement: 'below' | 'above'; // Whether dropdown should appear below or above cursor
 }
 
-// Detect platform once and cache
-export function detectPlatform(): PlatformInfo;
+interface UseCursorPositionOptions {
+  textareaRef: RefObject<HTMLTextAreaElement>;
+  enabled: boolean; // Only calculate when suggestions are active
+}
 
-// Get cached platform info
-export function getPlatform(): PlatformInfo;
-
-// Format keyboard shortcut with correct modifier
-export function formatShortcut(key: string, useSymbol?: boolean): string;
+function useCursorPosition(options: UseCursorPositionOptions): CursorPosition | null
 ```
 
 **Implementation Details:**
-- Uses `navigator.platform` or `navigator.userAgentData.platform` for detection
-- Falls back to user agent string parsing if needed
-- Caches result in module-level variable
-- Detection runs once on first import
+- Uses `textarea-caret` library's `getCaretCoordinates()` function
+- Converts textarea-relative coordinates to viewport-relative (fixed positioning)
+- Detects viewport boundaries and adjusts placement
+- Returns `null` on error, triggering fallback
+- Memoizes calculations to avoid unnecessary recomputation
 
-**Detection Logic:**
+### 2. Enhanced EnhancedNotesInput Component
+
+**Changes:**
+- Import and use `useCursorPosition` hook
+- Pass cursor position to dropdown via state
+- Add error boundary for cursor calculation failures
+- Maintain existing functionality as fallback
+
+**New State:**
 ```typescript
-const platform = navigator.platform || navigator.userAgent;
-if (/Mac|iPhone|iPad|iPod/.test(platform)) return 'mac';
-if (/Win/.test(platform)) return 'windows';
-if (/Linux/.test(platform)) return 'linux';
-return 'unknown';
+const [cursorPosition, setCursorPosition] = useState<CursorPosition | null>(null);
+const [useFallback, setUseFallback] = useState(false);
 ```
 
-### 2. Keyboard Hint Component
+### 3. Enhanced TagSuggestionsDropdown
 
-**File:** `src/components/KeyboardHint.tsx`
+**Changes:**
+- Accept `cursorPosition` prop
+- Use fixed positioning with calculated coordinates
+- Add CSS transitions for smooth repositioning
+- Implement smart placement (above/below)
+- Add fade-in/fade-out animations
 
-```typescript
-export interface KeyboardHintProps {
-  keys: string | string[];
-  label?: string;
-  variant?: 'default' | 'compact' | 'inline';
-  className?: string;
+**Styling Updates:**
+```css
+.tag-dropdown {
+  position: fixed;
+  z-index: 70;
+  transition: top 150ms ease-out, left 150ms ease-out, opacity 200ms ease-in-out;
+  animation: fadeIn 200ms ease-in-out;
 }
 
-export function KeyboardHint(props: KeyboardHintProps): JSX.Element;
-```
+.tag-dropdown.placement-above {
+  transform: translateY(-100%);
+  margin-top: -8px;
+}
 
-**Variants:**
-- `default`: Full hint with keys and label (e.g., "ESC Close")
-- `compact`: Keys only, no label (e.g., "ESC")
-- `inline`: Minimal styling for inline text (e.g., "Press Cmd+S to save")
-
-**Styling:**
-- Uses `<kbd>` semantic HTML element
-- Consistent background, border, padding across all instances
-- Adapts to dark/light backgrounds with appropriate contrast
-- Monospace font for key labels
-
-**Example Usage:**
-```tsx
-<KeyboardHint keys="Escape" label="Close" />
-<KeyboardHint keys={["Cmd", "D"]} label="Download" />
-<KeyboardHint keys="←" variant="compact" />
-```
-
-### 3. Updated ScreenshotViewer Component
-
-**Changes to ScreenshotViewer:**
-
-1. **Remove bottom-left overlay** - Delete the absolute positioned div with all shortcuts
-2. **Add ESC hint near close button** - Small hint next to X button in header
-3. **Add download hint to download button** - Show shortcut within or near button
-4. **Add arrow hints to navigation buttons** - Display ← and → on the buttons
-5. **Update save hint in notes panel** - Use platform-aware modifier key
-
-**New Layout Structure:**
-
-```tsx
-// Header with close hint
-<div className="flex items-center gap-2">
-  <button onClick={handleDownload}>
-    <Download />
-    Download
-    <KeyboardHint keys={["Cmd", "D"]} variant="compact" />
-  </button>
-  
-  <button onClick={onClose}>
-    <X />
-    <KeyboardHint keys="Escape" variant="compact" />
-  </button>
-</div>
-
-// Navigation buttons with arrow hints
-<button onClick={() => onNavigate("prev")}>
-  <ChevronLeft />
-  <KeyboardHint keys="←" variant="compact" />
-</button>
-
-// Notes panel save hint
-<div className="text-xs">
-  Press <KeyboardHint keys={["Cmd", "S"]} variant="inline" /> to save
-</div>
+.tag-dropdown.placement-below {
+  margin-top: 8px;
+}
 ```
 
 ## Data Models
 
-No new data models are required. This feature only affects UI presentation.
+### CursorPosition Type
+```typescript
+interface CursorPosition {
+  top: number;        // Pixels from viewport top
+  left: number;       // Pixels from viewport left
+  placement: 'below' | 'above';  // Dropdown placement relative to cursor
+}
+```
+
+### ViewportBounds Type
+```typescript
+interface ViewportBounds {
+  width: number;
+  height: number;
+  scrollX: number;
+  scrollY: number;
+}
+```
 
 ## Correctness Properties
 
-*A property is a characteristic or behavior that should hold true across all valid executions of a system—essentially, a formal statement about what the system should do. Properties serve as the bridge between human-readable specifications and machine-verifiable correctness guarantees.*
+*A property is a characteristic or behavior that should hold true across all valid executions of a system-essentially, a formal statement about what the system should do. Properties serve as the bridge between human-readable specifications and machine-verifiable correctness guarantees.*
 
-### Property 1: Platform detection consistency
-*For any* browser session, the detected platform should remain constant throughout the session and match the actual operating system
-**Validates: Requirements 5.5, 6.5**
+### Property 1: Cursor position accuracy
+*For any* cursor position in the textarea, the calculated dropdown position should be within 5 pixels of the actual cursor location
+**Validates: Requirements 1.1, 1.2**
 
-### Property 2: Modifier key correctness
-*For any* keyboard shortcut displayed, if the platform is macOS, the modifier should be "Cmd" or "⌘", and if the platform is Windows or Linux, the modifier should be "Ctrl"
-**Validates: Requirements 5.2, 5.3, 5.4**
+### Property 2: Viewport boundary respect
+*For any* cursor position near viewport edges, the dropdown should remain fully visible within the viewport bounds
+**Validates: Requirements 2.2, 2.3**
 
-### Property 3: Keyboard hint visibility
-*For any* action with a keyboard shortcut, the hint should be visible and not obscured by the screenshot image, regardless of image size
-**Validates: Requirements 1.5, 2.5, 3.5, 4.5**
+### Property 3: Position update consistency
+*For any* sequence of cursor movements, the dropdown position should update to follow the cursor without lag or jitter
+**Validates: Requirements 2.4, 4.1**
 
-### Property 4: Contextual positioning
-*For any* keyboard hint displayed, it should be positioned near or within the UI element that triggers the associated action
-**Validates: Requirements 1.1, 2.1, 3.1, 4.1**
+### Property 4: Fallback reliability
+*For any* cursor position calculation failure, the system should gracefully fall back to bottom-of-textarea positioning without crashing
+**Validates: Requirements 1.5, 8.1, 8.2**
 
-### Property 5: Keyboard hint styling consistency
-*For any* two keyboard hints displayed simultaneously, they should use the same visual styling (background, border, padding, font)
-**Validates: Requirements 9.1, 9.4**
+### Property 5: Performance constraint
+*For any* cursor position calculation, the computation should complete within 16ms (one frame at 60fps)
+**Validates: Requirements 4.1, 4.2**
 
-### Property 6: Semantic HTML usage
-*For any* keyboard hint rendered, it should use the `<kbd>` HTML element for proper semantic meaning
-**Validates: Requirements 9.5, 10.1**
-
-### Property 7: Conditional hint display
-*For any* navigation button (Previous/Next), the keyboard hint should only be displayed when the corresponding navigation action is available
-**Validates: Requirements 4.3**
-
-### Property 8: Platform detection caching
-*For any* sequence of platform detection calls within a session, only the first call should perform actual detection, and subsequent calls should return the cached result
-**Validates: Requirements 6.5, 13.4**
+### Property 6: Animation smoothness
+*For any* dropdown position change, the transition should be smooth and complete within 200ms
+**Validates: Requirements 5.3, 5.4, 5.5**
 
 ## Error Handling
 
-### Platform Detection Failures
+### Cursor Calculation Errors
+- **Cause:** Library failure, invalid textarea state, browser incompatibility
+- **Handling:** Catch errors, log warning, set `useFallback` to true
+- **User Impact:** Dropdown appears at bottom of textarea (current behavior)
 
-**Scenario:** Browser doesn't provide platform information
-- **Handling:** Default to 'unknown' platform, display 'Ctrl' as modifier
-- **User Impact:** Windows/Linux users see correct shortcuts, Mac users see Ctrl instead of Cmd
-- **Logging:** Log warning about failed platform detection
+### Viewport Boundary Edge Cases
+- **Cause:** Cursor near screen edges, small viewports, zoomed browsers
+- **Handling:** Detect boundaries, adjust placement to 'above' or constrain left position
+- **User Impact:** Dropdown stays visible, may appear above cursor
 
-**Scenario:** Conflicting platform signals (e.g., user agent says Mac but platform says Windows)
-- **Handling:** Prioritize `navigator.platform` over user agent string
-- **User Impact:** Minimal, most browsers provide consistent information
-- **Logging:** Log warning about conflicting platform data
+### Performance Degradation
+- **Cause:** Rapid typing, slow devices, complex textarea content
+- **Handling:** Debounce calculations (100ms), use requestAnimationFrame batching
+- **User Impact:** Slight delay in dropdown repositioning (imperceptible)
 
-### Rendering Issues
-
-**Scenario:** Keyboard hint causes layout overflow on narrow viewports
-- **Handling:** Use responsive CSS to hide or abbreviate hints below 768px width
-- **User Impact:** Mobile users see fewer hints (acceptable since mobile lacks physical keyboard)
-- **Fallback:** Touch-friendly UI remains fully functional
-
-**Scenario:** Keyboard hint overlaps with other UI elements
-- **Handling:** Use CSS z-index and positioning to ensure hints don't obscure critical UI
-- **User Impact:** None, hints are positioned to avoid conflicts
-- **Testing:** Visual regression testing on various screen sizes
+### Library Loading Failures
+- **Cause:** Network issues, build errors, missing dependencies
+- **Handling:** Try-catch around import, immediate fallback to bottom positioning
+- **User Impact:** Feature works with fallback, no crash
 
 ## Testing Strategy
 
 ### Unit Tests
-
-**Platform Detection (`src/utils/platform.test.ts`):**
-- Test detection with mocked `navigator.platform` values
-- Test caching behavior (first call detects, subsequent calls use cache)
-- Test `formatShortcut` with different platforms
-- Test fallback to 'unknown' when platform cannot be detected
-- Test modifier key selection (Cmd for Mac, Ctrl for others)
-
-**KeyboardHint Component (`src/components/KeyboardHint.test.tsx`):**
-- Test rendering with single key
-- Test rendering with multiple keys (e.g., Cmd+D)
-- Test different variants (default, compact, inline)
-- Test platform-aware modifier key display
-- Test semantic HTML (kbd element) usage
-- Test accessibility attributes
-
-**ScreenshotViewer Integration (`src/components/ScreenshotViewer.test.tsx`):**
-- Test that bottom-left overlay is not rendered
-- Test ESC hint appears near close button
-- Test download hint appears near download button
-- Test navigation hints appear on navigation buttons
-- Test save hint appears in notes panel
-- Test hints use correct modifier key based on platform
+- Test `useCursorPosition` hook with various textarea states
+- Test viewport boundary detection logic
+- Test fallback trigger conditions
+- Test coordinate transformation (textarea-relative to viewport-relative)
 
 ### Property-Based Tests
-
-Property-based tests will use **fast-check** library for TypeScript/React. Each test should run a minimum of 100 iterations.
-
-**Test 1: Platform detection consistency**
-```typescript
-// Feature: screenshot-viewer-ux, Property 1: Platform detection consistency
-// Validates: Requirements 5.5, 6.5
-fc.assert(
-  fc.property(fc.constant(null), () => {
-    const platform1 = getPlatform();
-    const platform2 = getPlatform();
-    return platform1.platform === platform2.platform &&
-           platform1.modifierKey === platform2.modifierKey;
-  }),
-  { numRuns: 100 }
-);
-```
-
-**Test 2: Modifier key correctness**
-```typescript
-// Feature: screenshot-viewer-ux, Property 2: Modifier key correctness
-// Validates: Requirements 5.2, 5.3, 5.4
-fc.assert(
-  fc.property(
-    fc.constantFrom('mac', 'windows', 'linux', 'unknown'),
-    (platform) => {
-      const mockPlatform = { platform, isMac: platform === 'mac' };
-      const modifier = mockPlatform.isMac ? 'Cmd' : 'Ctrl';
-      return (platform === 'mac' && modifier === 'Cmd') ||
-             (platform !== 'mac' && modifier === 'Ctrl');
-    }
-  ),
-  { numRuns: 100 }
-);
-```
-
-**Test 3: Keyboard hint visibility**
-```typescript
-// Feature: screenshot-viewer-ux, Property 3: Keyboard hint visibility
-// Validates: Requirements 1.5, 2.5, 3.5, 4.5
-fc.assert(
-  fc.property(
-    fc.record({
-      imageWidth: fc.integer({ min: 100, max: 3840 }),
-      imageHeight: fc.integer({ min: 100, max: 2160 }),
-      viewportWidth: fc.integer({ min: 768, max: 3840 }),
-      viewportHeight: fc.integer({ min: 600, max: 2160 })
-    }),
-    (dimensions) => {
-      // Render ScreenshotViewer with given dimensions
-      // Check that all keyboard hints are within viewport bounds
-      // and not overlapped by image element
-      const hints = getAllKeyboardHints();
-      return hints.every(hint => isVisible(hint) && !isObscured(hint));
-    }
-  ),
-  { numRuns: 100 }
-);
-```
-
-**Test 4: Contextual positioning**
-```typescript
-// Feature: screenshot-viewer-ux, Property 4: Contextual positioning
-// Validates: Requirements 1.1, 2.1, 3.1, 4.1
-fc.assert(
-  fc.property(fc.constant(null), () => {
-    // Render ScreenshotViewer
-    const closeButton = getCloseButton();
-    const escHint = getEscHint();
-    const downloadButton = getDownloadButton();
-    const downloadHint = getDownloadHint();
-    
-    // Check hints are near their associated buttons
-    return isNear(closeButton, escHint) &&
-           isNear(downloadButton, downloadHint);
-  }),
-  { numRuns: 100 }
-);
-```
-
-**Test 5: Keyboard hint styling consistency**
-```typescript
-// Feature: screenshot-viewer-ux, Property 5: Keyboard hint styling consistency
-// Validates: Requirements 9.1, 9.4
-fc.assert(
-  fc.property(fc.constant(null), () => {
-    const hints = getAllKeyboardHints();
-    if (hints.length < 2) return true;
-    
-    const firstHintStyles = getComputedStyle(hints[0]);
-    return hints.every(hint => {
-      const styles = getComputedStyle(hint);
-      return styles.backgroundColor === firstHintStyles.backgroundColor &&
-             styles.borderColor === firstHintStyles.borderColor &&
-             styles.padding === firstHintStyles.padding &&
-             styles.fontFamily === firstHintStyles.fontFamily;
-    });
-  }),
-  { numRuns: 100 }
-);
-```
-
-**Test 6: Semantic HTML usage**
-```typescript
-// Feature: screenshot-viewer-ux, Property 6: Semantic HTML usage
-// Validates: Requirements 9.5, 10.1
-fc.assert(
-  fc.property(fc.constant(null), () => {
-    const hints = getAllKeyboardHints();
-    return hints.every(hint => hint.tagName.toLowerCase() === 'kbd');
-  }),
-  { numRuns: 100 }
-);
-```
-
-**Test 7: Conditional hint display**
-```typescript
-// Feature: screenshot-viewer-ux, Property 7: Conditional hint display
-// Validates: Requirements 4.3
-fc.assert(
-  fc.property(
-    fc.record({
-      currentIndex: fc.integer({ min: 0, max: 10 }),
-      totalScreenshots: fc.integer({ min: 1, max: 10 })
-    }),
-    ({ currentIndex, totalScreenshots }) => {
-      // Render with specific position in screenshot list
-      const hasPrev = currentIndex > 0;
-      const hasNext = currentIndex < totalScreenshots - 1;
-      
-      const prevHint = getPrevHint();
-      const nextHint = getNextHint();
-      
-      return (hasPrev ? prevHint !== null : prevHint === null) &&
-             (hasNext ? nextHint !== null : nextHint === null);
-    }
-  ),
-  { numRuns: 100 }
-);
-```
+- **Library:** fast-check (already in project)
+- **Configuration:** 100+ iterations per property
+- **Properties:** All 6 correctness properties listed above
 
 ### Integration Tests
+- Test complete flow: type '#' → see dropdown at cursor
+- Test with long text, wrapped lines, scrolled textarea
+- Test with different font sizes and line heights
+- Test keyboard navigation while dropdown is positioned
+- Test window resize behavior
 
-**Full User Flow:**
-1. Open Screenshot Viewer on different platforms (mocked)
-2. Verify correct modifier keys are displayed
-3. Verify all hints are visible and positioned correctly
-4. Verify keyboard shortcuts still function correctly
-5. Test responsive behavior on different viewport sizes
+### Manual Testing Checklist
+- [ ] Dropdown appears at cursor in middle of text
+- [ ] Dropdown appears at cursor at start of text
+- [ ] Dropdown appears at cursor at end of text
+- [ ] Dropdown flips above cursor when near bottom
+- [ ] Dropdown stays in viewport when near right edge
+- [ ] Dropdown follows cursor when typing continues
+- [ ] Fallback works when calculation fails
+- [ ] Animations are smooth and not jarring
+- [ ] Works in Chrome, Firefox, Safari, Edge
 
-**Cross-Browser Testing:**
-- Test platform detection in Chrome, Firefox, Safari, Edge
-- Verify consistent behavior across browsers
-- Test fallback behavior when platform APIs are unavailable
+## Implementation Plan
 
-### Visual Regression Tests
+### Phase 1: Library Integration
+1. Install `textarea-caret` package
+2. Create `useCursorPosition` hook with basic functionality
+3. Add error handling and fallback logic
+4. Write unit tests for the hook
 
-- Capture screenshots of viewer with hints on Mac (Cmd)
-- Capture screenshots of viewer with hints on Windows (Ctrl)
-- Compare against baseline to detect unintended visual changes
-- Test with various image sizes (small, medium, large, full-screen)
+### Phase 2: Component Updates
+1. Update `EnhancedNotesInput` to use the hook
+2. Pass cursor position to dropdown component
+3. Update dropdown styling for fixed positioning
+4. Add CSS transitions and animations
+
+### Phase 3: Smart Positioning
+1. Implement viewport boundary detection
+2. Add above/below placement logic
+3. Handle edge cases (right edge, scrolling)
+4. Test with various screen sizes
+
+### Phase 4: Performance Optimization
+1. Add debouncing for rapid typing
+2. Implement requestAnimationFrame batching
+3. Memoize expensive calculations
+4. Profile and optimize hot paths
+
+### Phase 5: Polish and Testing
+1. Add smooth animations
+2. Write property-based tests
+3. Conduct cross-browser testing
+4. Document fallback behavior
+
+## Dependencies
+
+### New Dependencies
+- `textarea-caret` (^3.1.0) - Lightweight library for cursor position calculation
+  - Size: ~2KB minified
+  - No dependencies
+  - TypeScript support via @types/textarea-caret
+
+### Existing Dependencies
+- React 19
+- TypeScript
+- fast-check (for property-based testing)
 
 ## Performance Considerations
 
-### Platform Detection Caching
+### Optimization Strategies
+1. **Lazy Calculation:** Only calculate position when dropdown is visible
+2. **Debouncing:** Wait 100ms after last keystroke before recalculating
+3. **RAF Batching:** Batch multiple position updates using requestAnimationFrame
+4. **Memoization:** Cache calculations for same cursor position
+5. **CSS Transforms:** Use GPU-accelerated transforms for positioning
 
-- Detection runs once on module import
-- Result cached in module-level variable
-- No repeated detection calls during session
-- Negligible performance impact (<1ms)
-
-### Rendering Optimization
-
-- KeyboardHint component is lightweight (no state, minimal props)
-- Uses CSS for styling, no JavaScript calculations
-- No layout shifts when hints are rendered
-- Hints rendered as part of initial component tree (no dynamic insertion)
-
-### Memory Usage
-
-- Platform detection cache: ~100 bytes
-- Each KeyboardHint instance: ~200 bytes
-- Total overhead: <1KB for all hints combined
+### Expected Performance
+- Cursor calculation: <5ms (well under 16ms budget)
+- Position update: <1ms (state update only)
+- Animation: 200ms (smooth, perceived as instant)
+- Memory overhead: <1KB (minimal state)
 
 ## Accessibility
 
+### Keyboard Navigation
+- Arrow keys navigate suggestions without moving cursor
+- Tab/Enter insert selected suggestion
+- Escape closes dropdown
+- Focus remains on textarea throughout
+
 ### Screen Reader Support
-
-**Semantic HTML:**
-- All keyboard hints use `<kbd>` element
-- Screen readers announce as "keyboard shortcut"
-
-**ARIA Labels:**
-- Interactive elements include shortcuts in aria-label
-- Example: `aria-label="Close viewer (Escape key)"`
-
-**Keyboard Navigation:**
-- All functionality remains keyboard accessible
-- Hints don't interfere with tab order
-- Focus indicators remain visible
+- Dropdown has `role="listbox"`
+- Suggestions have `role="option"`
+- Selected suggestion announced via `aria-live="polite"`
+- Cursor position changes don't trigger announcements
 
 ### Visual Accessibility
+- High contrast maintained (zinc-800 bg, white border)
+- Dropdown has clear focus indicators
+- Animations respect `prefers-reduced-motion`
+- Minimum touch target size: 44x44px
 
-**Contrast:**
-- Keyboard hints meet WCAG AA contrast requirements (4.5:1 minimum)
-- Tested on both dark (viewer background) and light backgrounds
+## Browser Compatibility
 
-**Font Size:**
-- Hints use readable font size (minimum 12px)
-- Scale appropriately with browser zoom
+### Supported Browsers
+- Chrome/Edge 90+
+- Firefox 88+
+- Safari 14+
 
-**Color Independence:**
-- Hints don't rely solely on color to convey meaning
-- Use border and background to distinguish from surrounding text
+### Fallback for Older Browsers
+- Feature detection for `getCaretCoordinates`
+- Automatic fallback to bottom positioning
+- No polyfills required (graceful degradation)
 
 ## Migration Strategy
 
-### Backward Compatibility
-
-No breaking changes to component API. Changes are purely visual/UX improvements.
-
-### Deployment Steps
-
-1. Deploy platform detection utility
-2. Deploy KeyboardHint component
-3. Update ScreenshotViewer to use new components
-4. Remove old bottom-left overlay code
-5. Verify in production with real user agents
+### Rollout Plan
+1. **Phase 1:** Deploy with feature flag (disabled by default)
+2. **Phase 2:** Enable for internal testing
+3. **Phase 3:** Enable for 10% of users (A/B test)
+4. **Phase 4:** Full rollout if metrics are positive
 
 ### Rollback Plan
-
-If issues arise:
-1. Revert ScreenshotViewer changes
-2. Restore bottom-left overlay
-3. Keep platform detection utility (no harm in having it)
-4. Investigate and fix issues before re-deploying
+- Feature flag can disable cursor-following instantly
+- Falls back to current bottom-of-textarea behavior
+- No data migration required
+- No breaking changes to existing functionality
 
 ## Future Enhancements
 
-### Customizable Shortcuts
+### Potential Improvements
+1. **Multi-line selection:** Show dropdown at end of selection
+2. **Custom positioning:** User preference for above/below
+3. **Dropdown width:** Auto-size based on longest suggestion
+4. **Preview on hover:** Show tag usage stats on hover
+5. **Fuzzy matching:** Better suggestion filtering
 
-- Allow users to customize keyboard shortcuts
-- Store preferences in user settings
-- Update hints dynamically based on preferences
+### Alternative Approaches Considered
+1. **ContentEditable div:** More control but complex, accessibility issues
+2. **Monaco Editor:** Overkill for simple notes, large bundle size
+3. **Custom textarea overlay:** Complex z-index management, brittle
+4. **Portal-based dropdown:** Considered but fixed positioning is simpler
 
-### Keyboard Shortcut Help Modal
+## Conclusion
 
-- Add "?" key to show all available shortcuts
-- Display comprehensive list with descriptions
-- Include search/filter functionality
-
-### Touch Gesture Hints
-
-- Show swipe gestures on touch devices
-- Animate hints to demonstrate gestures
-- Hide keyboard hints on touch-only devices
-
-### Internationalization
-
-- Translate hint labels to user's language
-- Handle RTL languages appropriately
-- Consider keyboard layout differences (QWERTY vs AZERTY)
-
+This design provides a robust, performant solution for cursor-following tag suggestions with graceful fallback. The use of the proven `textarea-caret` library minimizes implementation risk, while the comprehensive error handling ensures reliability. The phased rollout plan allows for safe deployment and easy rollback if needed.

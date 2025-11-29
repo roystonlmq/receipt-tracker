@@ -1,142 +1,250 @@
-# Implementation Plan: Screenshot Viewer UX Improvements
+# Implementation Tasks: Cursor-Following Tag Suggestions
 
-- [x] 1. Create platform detection utility
-  - Create `src/utils/platform.ts` with OS detection logic
-  - Implement `detectPlatform()` function using navigator.platform API
-  - Implement caching mechanism for platform detection result
-  - Implement `getPlatform()` function to retrieve cached platform info
-  - Implement `formatShortcut()` helper function for formatting keyboard shortcuts
-  - _Requirements: 5.1, 5.2, 5.3, 5.4, 5.5, 6.1, 6.2, 6.3, 6.4, 6.5_
+## Task 1: Install Dependencies and Setup
+- [x] 1.1 Install textarea-caret package
+  - Run `pnpm add textarea-caret`
+  - Run `pnpm add -D @types/textarea-caret`
+  - Verify installation in package.json
+  - _Requirements: 3.1, 3.2_
 
-- [ ]* 1.1 Write unit tests for platform detection
-  - Test platform detection with mocked navigator values
-  - Test caching behavior
-  - Test formatShortcut with different platforms
-  - Test fallback to 'unknown' platform
-  - _Requirements: 5.1, 5.2, 5.3, 5.4, 5.5, 6.1, 6.2, 6.3, 6.4, 6.5_
+- [x] 1.2 Create utility file for cursor position
+  - Create `src/utils/cursorPosition.ts`
+  - Export types: `CursorPosition`, `ViewportBounds`
+  - Add JSDoc comments
+  - _Requirements: Design - Components and Interfaces_
 
-- [ ]* 1.2 Write property test for platform detection consistency
-  - **Property 1: Platform detection consistency**
-  - **Validates: Requirements 5.5, 6.5**
+## Task 2: Implement useCursorPosition Hook
+- [x] 2.1 Create basic hook structure
+  - Create `src/hooks/useCursorPosition.ts`
+  - Define hook interface and options type
+  - Implement basic cursor position calculation using textarea-caret
+  - Return null when disabled or on error
+  - _Requirements: 1.1, 1.4_
 
-- [ ]* 1.3 Write property test for modifier key correctness
-  - **Property 2: Modifier key correctness**
-  - **Validates: Requirements 5.2, 5.3, 5.4**
+- [x] 2.2 Add viewport boundary detection
+  - Calculate viewport dimensions
+  - Detect if cursor is near bottom edge (within 300px)
+  - Detect if cursor is near right edge (within 300px)
+  - Set placement to 'above' when near bottom
+  - Adjust left position when near right edge
+  - _Requirements: 2.2, 2.3_
 
-- [ ]* 1.4 Write property test for platform detection caching
-  - **Property 8: Platform detection caching**
-  - **Validates: Requirements 6.5, 13.4**
+- [x] 2.3 Implement coordinate transformation
+  - Get textarea bounding rect
+  - Convert textarea-relative coords to viewport-relative
+  - Account for textarea scroll offset
+  - Account for page scroll offset
+  - _Requirements: 1.2, 1.3_
 
-- [x] 2. Create KeyboardHint component
-  - Create `src/components/KeyboardHint.tsx` component
-  - Implement props interface (keys, label, variant, className)
-  - Implement three variants: default, compact, inline
-  - Use platform detection to display correct modifier keys
-  - Use semantic `<kbd>` HTML element
-  - Implement consistent styling with Tailwind classes
-  - Add ARIA attributes for accessibility
-  - _Requirements: 7.1, 7.2, 7.3, 7.4, 9.1, 9.2, 9.3, 9.4, 9.5, 10.1, 10.2, 10.3, 10.4_
+- [x] 2.4 Add error handling and fallback
+  - Wrap calculation in try-catch
+  - Log warning on error
+  - Return null to trigger fallback
+  - Track fallback state
+  - _Requirements: 1.5, 8.1, 8.2_
 
-- [ ]* 2.1 Write unit tests for KeyboardHint component
-  - Test rendering with single key
-  - Test rendering with multiple keys
-  - Test different variants
-  - Test platform-aware modifier display
-  - Test semantic HTML usage
-  - Test accessibility attributes
-  - _Requirements: 7.1, 7.2, 7.3, 7.4, 9.1, 9.2, 9.3, 9.4, 9.5, 10.1, 10.2, 10.3, 10.4_
+- [ ]* 2.5 Write unit tests for useCursorPosition hook
+  - Test basic position calculation
+  - Test viewport boundary detection
+  - Test coordinate transformation
+  - Test error handling
+  - Test fallback behavior
+  - _Requirements: Testing Strategy_
 
-- [ ]* 2.2 Write property test for keyboard hint styling consistency
-  - **Property 5: Keyboard hint styling consistency**
-  - **Validates: Requirements 9.1, 9.4**
+## Task 3: Add Performance Optimizations
+- [x] 3.1 Implement debouncing
+  - Add 100ms debounce to position calculations
+  - Clear debounce timer on unmount
+  - Skip calculation if dropdown not visible
+  - _Requirements: 4.2, 4.4_
 
-- [ ]* 2.3 Write property test for semantic HTML usage
-  - **Property 6: Semantic HTML usage**
-  - **Validates: Requirements 9.5, 10.1**
+- [ ] 3.2 Add memoization and RAF batching
+  - Memoize cursor position calculation to avoid recalculation for same cursor index
+  - Batch multiple position updates using requestAnimationFrame
+  - Cancel pending RAF on unmount
+  - _Requirements: 4.1, 4.5, Performance Considerations_
 
-- [x] 3. Update ScreenshotViewer - Remove bottom overlay
-  - Remove the bottom-left keyboard shortcuts overlay div
-  - Clean up related CSS classes
-  - Verify no visual artifacts remain
-  - _Requirements: 12.1, 12.2, 12.3, 12.4, 12.5_
+- [ ]* 3.3 Write property test for performance
+  - **Property 5: Performance constraint**
+  - Test that calculation completes within 16ms
+  - Run 100+ iterations
+  - _Requirements: 4.1_
 
-- [x] 4. Update ScreenshotViewer - Add ESC hint to close button
-  - Import KeyboardHint component
-  - Add ESC hint near the close button in header
-  - Use compact variant for minimal visual footprint
-  - Position hint to not interfere with button click area
-  - Ensure hint is visible on all viewport sizes
-  - _Requirements: 2.1, 2.2, 2.3, 2.4, 2.5_
+## Task 4: Update EnhancedNotesInput Component
+- [x] 4.1 Integrate useCursorPosition hook
+  - Import and use useCursorPosition hook
+  - Pass textareaRef and enabled flag
+  - Store cursor position in state
+  - Track fallback mode
+  - _Requirements: 2.1, 2.4_
 
-- [x] 5. Update ScreenshotViewer - Add download hint to download button
-  - Add keyboard hint to download button
-  - Use platform-aware modifier key (Cmd/Ctrl + D)
-  - Position hint within or adjacent to button
-  - Maintain hint visibility during download state
-  - Ensure hint doesn't cause button layout issues
-  - _Requirements: 3.1, 3.2, 3.3, 3.4, 3.5_
+- [x] 4.2 Update dropdown positioning logic
+  - Pass cursor position to dropdown component
+  - Use fixed positioning when cursor position available
+  - Fall back to bottom positioning when cursor position is null
+  - _Requirements: 2.5, 8.1_
 
-- [x] 6. Update ScreenshotViewer - Add navigation hints to Previous/Next buttons
-  - Add left arrow (←) hint to Previous button
-  - Add right arrow (→) hint to Next button
-  - Use compact variant for clean appearance
-  - Conditionally render hints based on navigation availability
-  - Ensure hints are readable over image background
-  - _Requirements: 4.1, 4.2, 4.3, 4.4, 4.5_
+- [x] 4.3 Add position update on typing
+  - Recalculate position when user types after `#`
+  - Update position when cursor moves
+  - Debounce updates during rapid typing
+  - _Requirements: 2.4, 4.2_
 
-- [x] 7. Update ScreenshotViewer - Update save hint in notes panel
-  - Update the save keyboard hint below notes input
-  - Use platform-aware modifier key (Cmd/Ctrl + S)
-  - Use inline variant for natural text flow
-  - Maintain hint visibility in all save states
-  - _Requirements: 8.1, 8.2, 8.3, 8.4, 8.5_
+- [ ]* 4.4 Write integration tests
+  - Test complete flow: type '#' → see dropdown at cursor
+  - Test fallback when calculation fails
+  - Test position updates on typing
+  - _Requirements: Testing Strategy_
 
-- [ ]* 7.1 Write property test for keyboard hint visibility
-  - **Property 3: Keyboard hint visibility**
-  - **Validates: Requirements 1.5, 2.5, 3.5, 4.5**
+## Task 5: Enhance TagSuggestionsDropdown Styling
+- [x] 5.1 Update dropdown positioning
+  - Change from absolute to fixed positioning
+  - Use cursor position for top/left coordinates
+  - Add placement class for above/below
+  - Ensure z-index is high enough (z-[70])
+  - _Requirements: 2.1, 2.2_
 
-- [ ]* 7.2 Write property test for contextual positioning
-  - **Property 4: Contextual positioning**
-  - **Validates: Requirements 1.1, 2.1, 3.1, 4.1**
+- [x] 5.2 Add smooth animations
+  - Add CSS transition for position changes (150ms ease-out)
+  - Add fade-in animation on appear (200ms)
+  - Add fade-out animation on disappear (100ms)
+  - Respect prefers-reduced-motion
+  - _Requirements: 5.3, 5.4, 5.5_
 
-- [ ]* 7.3 Write property test for conditional hint display
-  - **Property 7: Conditional hint display**
-  - **Validates: Requirements 4.3**
+- [x] 5.3 Implement smart placement
+  - Add CSS for placement-above (transform translateY(-100%))
+  - Add CSS for placement-below (margin-top: 8px)
+  - Ensure dropdown stays within viewport
+  - _Requirements: 2.2, 2.3_
 
-- [x] 8. Implement responsive behavior for keyboard hints
-  - Add media queries to hide/abbreviate hints on narrow viewports (<768px)
-  - Test hint visibility on mobile devices
-  - Ensure touch-friendly UI remains unaffected
-  - Handle viewport resize events gracefully
-  - _Requirements: 11.1, 11.2, 11.3, 11.4, 11.5_
+- [ ]* 5.4 Write property test for animations
+  - **Property 6: Animation smoothness**
+  - Test that transitions complete within 200ms
+  - Run 100+ iterations
+  - _Requirements: 5.3, 5.4, 5.5_
 
-- [ ]* 8.1 Write integration tests for ScreenshotViewer
-  - Test that bottom overlay is not rendered
-  - Test ESC hint appears near close button
-  - Test download hint appears near download button
-  - Test navigation hints appear on navigation buttons
-  - Test save hint appears in notes panel
-  - Test hints use correct modifier key based on platform
-  - _Requirements: 1.1, 2.1, 3.1, 4.1, 8.1, 12.1_
+## Task 6: Implement Edge Case Handling
+- [ ] 6.1 Handle window resize and scrollable containers
+  - Add resize event listener to recalculate position
+  - Debounce resize handler
+  - Detect if textarea is in scrollable container
+  - Account for container scroll offset
+  - Clean up listener on unmount
+  - _Requirements: 7.3, 7.4_
 
-- [x] 9. Checkpoint - Ensure all tests pass
-  - Ensure all tests pass, ask the user if questions arise.
+- [ ] 6.2 Test edge cases manually
+  - Test with very long lines (>1000 chars) and horizontal scrolling
+  - Test with emoji characters and Unicode
+  - Test with RTL text
+  - Verify position accuracy in all cases
+  - _Requirements: 7.1, 7.2_
 
-- [x] 10. Test cross-browser compatibility
-  - Test platform detection in Chrome, Firefox, Safari, Edge
-  - Verify keyboard hints render correctly across browsers
-  - Test fallback behavior when platform APIs unavailable
-  - Document any browser-specific issues
-  - _Requirements: 5.1, 5.5, 6.1, 6.5, 13.1, 13.2, 13.3, 13.4, 13.5_
+- [ ]* 6.3 Write property tests for edge cases
+  - **Property 1: Cursor position accuracy**
+  - Test with various text layouts
+  - Test with scrolling
+  - Test with special characters
+  - Run 100+ iterations
+  - _Requirements: 1.1, 1.2, 7.1, 7.2_
 
-- [x] 11. Verify accessibility compliance
-  - Test with screen readers (NVDA, JAWS, VoiceOver)
-  - Verify keyboard navigation works correctly
-  - Check ARIA labels are properly announced
-  - Verify contrast ratios meet WCAG AA standards
-  - Test with browser zoom (100%, 150%, 200%)
-  - _Requirements: 10.1, 10.2, 10.3, 10.4, 10.5_
+## Task 7: Implement Property-Based Tests
+- [ ]* 7.1 Write property test for viewport boundaries
+  - **Property 2: Viewport boundary respect**
+  - Test that dropdown stays within viewport
+  - Test with cursor near all edges
+  - Run 100+ iterations
+  - _Requirements: 2.2, 2.3_
 
-- [x] 12. Final checkpoint - Ensure all tests pass
-  - Ensure all tests pass, ask the user if questions arise.
+- [ ]* 7.2 Write property test for position updates
+  - **Property 3: Position update consistency**
+  - Test that position follows cursor movements
+  - Test with rapid cursor changes
+  - Run 100+ iterations
+  - _Requirements: 2.4, 4.1_
 
+- [ ]* 7.3 Write property test for fallback
+  - **Property 4: Fallback reliability**
+  - Test that fallback never crashes
+  - Test with simulated errors
+  - Run 100+ iterations
+  - _Requirements: 1.5, 8.1, 8.2_
+
+## Task 8: Accessibility Improvements
+- [x] 8.1 Ensure keyboard navigation works
+  - Verify arrow keys navigate suggestions
+  - Verify Tab/Enter insert suggestion
+  - Verify Escape closes dropdown
+  - Verify focus stays on textarea
+  - _Requirements: 6.1, 6.2, 6.3, 6.4_
+
+- [ ] 8.2 Add ARIA attributes
+  - Add role="listbox" to dropdown
+  - Add role="option" to suggestions
+  - Add aria-live="polite" for announcements
+  - Add aria-selected for current selection
+  - _Requirements: 6.5, Accessibility_
+
+- [ ]* 8.3 Write property tests for keyboard navigation
+  - Test that arrow keys don't move cursor
+  - Test that Tab/Enter insert at correct position
+  - Test that Escape closes dropdown
+  - Run 100+ iterations
+  - _Requirements: 6.2, 6.3, 6.4_
+
+## Task 9: Cross-Browser Testing and Polish
+- [ ]* 9.1 Test in Chrome
+  - Test cursor position accuracy
+  - Test animations
+  - Test edge cases
+  - _Requirements: Browser Compatibility_
+
+- [ ]* 9.2 Test in Firefox
+  - Test cursor position accuracy
+  - Test animations
+  - Test edge cases
+  - _Requirements: Browser Compatibility_
+
+- [ ]* 9.3 Test in Safari
+  - Test cursor position accuracy
+  - Test animations
+  - Test edge cases
+  - _Requirements: Browser Compatibility_
+
+- [ ]* 9.4 Test in Edge
+  - Test cursor position accuracy
+  - Test animations
+  - Test edge cases
+  - _Requirements: Browser Compatibility_
+
+## Task 10: Documentation and Cleanup
+- [ ]* 10.1 Update component documentation
+  - Document useCursorPosition hook API
+  - Add JSDoc comments to all functions
+  - Document fallback behavior
+  - _Requirements: Documentation_
+
+- [ ]* 10.2 Remove debug logging
+  - Remove console.log statements
+  - Keep only error logging
+  - _Requirements: Code Quality_
+
+- [ ]* 10.3 Update README
+  - Document cursor-following feature
+  - Explain fallback behavior
+  - Add troubleshooting section
+  - _Requirements: Documentation_
+
+## Task 11: Checkpoint - Verify All Tests Pass
+- [ ] 11.1 Run all tests
+  - Ensure all tests pass
+  - Ask the user if questions arise
+  - _Requirements: All_
+
+## Notes
+
+- Core cursor-following functionality has been implemented (Tasks 1-5 complete)
+- Remaining work focuses on performance optimizations, edge cases, accessibility, and testing
+- Property-based tests are marked optional (*) but recommended
+- Cross-browser testing (task 9) should be done manually
+- Documentation (task 10) is optional but helpful
+- The checkpoint (task 11) ensures everything works before completion
