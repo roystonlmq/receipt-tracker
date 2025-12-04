@@ -283,44 +283,43 @@ export const deleteScreenshot = createServerFn({ method: "POST" })
 			throw new Error("ID and user ID are required");
 		}
 
+		const { id, userId } = data;
+
+		// Use raw pg client to bypass Drizzle ORM issues in Workers
+		const client = new Client({
+			connectionString: process.env.DATABASE_URL!,
+		});
+		
 		try {
-			const { id, userId } = data;
-
-			// Use raw pg client to bypass Drizzle ORM issues in Workers
-			const client = new Client({
-				connectionString: process.env.DATABASE_URL!,
-			});
+			await client.connect();
 			
-			try {
-				await client.connect();
-				
-				// Verify ownership and delete
-				const result = await client.query(
-					`DELETE FROM screenshots WHERE id = $1 AND user_id = $2 RETURNING id`,
-					[id, userId]
-				);
+			// Verify ownership and delete
+			const result = await client.query(
+				`DELETE FROM screenshots WHERE id = $1 AND user_id = $2 RETURNING id`,
+				[id, userId]
+			);
 
-				if (result.rows.length === 0) {
-					throw new Error("Screenshot not found or access denied");
-				}
-
-				// Clean up orphaned tags after deletion
-				try {
-					const { cleanupOrphanedTags } = await import("./tags");
-					await cleanupOrphanedTags({ data: { userId } });
-					console.log("[deleteScreenshot] Orphaned tags cleaned up");
-				} catch (error) {
-					console.error("[deleteScreenshot] Failed to cleanup orphaned tags:", error);
-					// Don't throw - tag cleanup failure shouldn't block deletion
-				}
-
-				return { success: true };
-			} finally {
-				await client.end();
+			if (result.rows.length === 0) {
+				throw new Error("Screenshot not found or access denied");
 			}
+
+			// Clean up orphaned tags after deletion
+			try {
+				const { cleanupOrphanedTags } = await import("./tags");
+				await cleanupOrphanedTags({ data: { userId } });
+				console.log("[deleteScreenshot] Orphaned tags cleaned up");
+			} catch (error) {
+				console.error("[deleteScreenshot] Failed to cleanup orphaned tags:", error);
+				// Don't throw - tag cleanup failure shouldn't block deletion
+			}
+
+			return { success: true };
 		} catch (error) {
 			console.error("Delete failed:", error);
-			throw new Error("Failed to delete screenshot. Please try again.");
+			const message = error instanceof Error ? error.message : "Failed to delete screenshot. Please try again.";
+			throw new Error(message);
+		} finally {
+			await client.end();
 		}
 	});
 
@@ -466,37 +465,36 @@ export const batchDeleteScreenshots = createServerFn({ method: "POST" })
 			throw new Error("At least one screenshot ID is required");
 		}
 
+		const { ids, userId } = data;
+
+		// Use raw pg client to bypass Drizzle ORM issues in Workers
+		const client = new Client({
+			connectionString: process.env.DATABASE_URL!,
+		});
+		
 		try {
-			const { ids, userId } = data;
-
-			// Use raw pg client to bypass Drizzle ORM issues in Workers
-			const client = new Client({
-				connectionString: process.env.DATABASE_URL!,
-			});
+			await client.connect();
 			
-			try {
-				await client.connect();
-				
-				// Delete each screenshot individually to ensure proper ownership verification
-				let deletedCount = 0;
-				for (const id of ids) {
-					const deleteResult = await client.query(
-						`DELETE FROM screenshots WHERE id = $1 AND user_id = $2 RETURNING id`,
-						[id, userId]
-					);
+			// Delete each screenshot individually to ensure proper ownership verification
+			let deletedCount = 0;
+			for (const id of ids) {
+				const deleteResult = await client.query(
+					`DELETE FROM screenshots WHERE id = $1 AND user_id = $2 RETURNING id`,
+					[id, userId]
+				);
 
-					if (deleteResult.rows.length > 0) {
-						deletedCount++;
-					}
+				if (deleteResult.rows.length > 0) {
+					deletedCount++;
 				}
-
-				return { success: true, count: deletedCount };
-			} finally {
-				await client.end();
 			}
+
+			return { success: true, count: deletedCount };
 		} catch (error) {
 			console.error("Batch delete failed:", error);
-			throw new Error("Failed to delete screenshots. Please try again.");
+			const message = error instanceof Error ? error.message : "Failed to delete screenshots. Please try again.";
+			throw new Error(message);
+		} finally {
+			await client.end();
 		}
 	});
 

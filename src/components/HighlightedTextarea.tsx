@@ -67,10 +67,10 @@ export function HighlightedTextarea({
 
 	return (
 		<div className="relative w-full h-full">
-			{/* Highlighted overlay - positioned behind textarea */}
+			{/* Highlighted overlay - positioned behind textarea with visible text */}
 			<div
 				ref={overlayRef}
-				className={`absolute inset-0 p-3 overflow-hidden pointer-events-none whitespace-pre-wrap break-words font-mono text-transparent ${className}`}
+				className={`absolute inset-0 p-3 overflow-hidden pointer-events-none whitespace-pre-wrap break-words font-mono text-white/90 ${className}`}
 				style={{
 					lineHeight: "1.5",
 					fontSize: "inherit",
@@ -80,7 +80,7 @@ export function HighlightedTextarea({
 				dangerouslySetInnerHTML={{ __html: highlightedHtml }}
 			/>
 
-			{/* Actual textarea - transparent text to show overlay behind */}
+			{/* Actual textarea - transparent text to show overlay behind, visible caret */}
 			<textarea
 				ref={textareaRef}
 				value={value}
@@ -88,7 +88,7 @@ export function HighlightedTextarea({
 				onKeyDown={onKeyDown}
 				onScroll={handleScroll}
 				placeholder={placeholder}
-				className={`relative w-full h-full p-3 bg-transparent border-0 text-white/90 placeholder-white/40 focus:outline-none resize-none caret-white ${className}`}
+				className={`relative w-full h-full p-3 bg-transparent border-0 text-transparent placeholder-white/40 focus:outline-none resize-none caret-white ${className}`}
 				style={{
 					lineHeight: "1.5",
 					background: "transparent",

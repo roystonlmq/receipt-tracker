@@ -8,20 +8,24 @@ interface MarkdownNotesProps {
 
 export function MarkdownNotes({ content, onHashtagClick }: MarkdownNotesProps) {
 	return (
-		<div className="text-sm text-white/90 leading-relaxed prose prose-invert prose-sm max-w-none">
+		<div className="text-sm text-white/90 leading-relaxed">
 			<ReactMarkdown
 				components={{
 				// Style bullet lists
 				ul: ({ children }) => (
-					<ul className="list-disc list-inside space-y-1 my-2">{children}</ul>
+					<ul className="list-disc pl-6 ml-0 space-y-1 my-2 marker:text-white/70" style={{ listStyleType: 'disc' }}>
+						{children}
+					</ul>
 				),
 				// Style ordered lists
 				ol: ({ children }) => (
-					<ol className="list-decimal list-inside space-y-1 my-2">{children}</ol>
+					<ol className="list-decimal pl-6 ml-0 space-y-1 my-2 marker:text-white/70" style={{ listStyleType: 'decimal' }}>
+						{children}
+					</ol>
 				),
 				// Style list items
 				li: ({ children }) => (
-					<li className="text-white/90">
+					<li className="text-white/90" style={{ display: 'list-item' }}>
 						{onHashtagClick
 							? highlightHashtagsClickable(String(children), onHashtagClick)
 							: children}

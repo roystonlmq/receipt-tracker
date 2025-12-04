@@ -1,5 +1,5 @@
 import { createFileRoute, useSearch } from "@tanstack/react-router";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { FileExplorer } from "@/components/FileExplorer";
 import { ScreenshotUpload } from "@/components/ScreenshotUpload";
 import { ScreenshotViewer } from "@/components/ScreenshotViewer";
@@ -27,6 +27,11 @@ function ScreenshotsPage() {
 	const [viewingScreenshot, setViewingScreenshot] = useState<Screenshot | null>(null);
 	const { toasts, removeToast, success, error } = useToast();
 
+	// Refresh FileExplorer when search params change (folder, query navigation)
+	useEffect(() => {
+		setRefreshKey((prev) => prev + 1);
+	}, [searchParams.folder, searchParams.query]);
+
 	const handleUploadComplete = (screenshots: Screenshot[]) => {
 		console.log("Uploaded screenshots:", screenshots);
 		// Refresh the file explorer
@@ -47,6 +52,8 @@ function ScreenshotsPage() {
 
 	const handleCloseViewer = () => {
 		setViewingScreenshot(null);
+		// Refresh the file explorer when viewer closes (in case of deletion)
+		setRefreshKey((prev) => prev + 1);
 	};
 
 	const handleUpdateScreenshot = (updatedScreenshot: Screenshot) => {
@@ -107,6 +114,8 @@ function ScreenshotsPage() {
 						screenshot={viewingScreenshot}
 						onClose={handleCloseViewer}
 						onUpdate={handleUpdateScreenshot}
+						onSuccess={success}
+						onError={error}
 					/>
 				)}
 			</div>

@@ -1,5 +1,5 @@
-import { Link } from "@tanstack/react-router";
-import { useState } from "react";
+import { Link, useNavigate } from "@tanstack/react-router";
+import { useState, useEffect } from "react";
 import { Home, Menu, Image, Info, X, Receipt, Hash, LogOut, User, AlertTriangle } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { signOut } from "@/server/auth";
@@ -7,6 +7,22 @@ import { signOut } from "@/server/auth";
 export default function Header() {
 	const [isOpen, setIsOpen] = useState(false);
 	const { user, devMode } = useAuth();
+	const navigate = useNavigate();
+
+	// Handle ESC key to close sidebar
+	useEffect(() => {
+		const handleEscape = (e: KeyboardEvent) => {
+			if (e.key === "Escape" && isOpen) {
+				e.preventDefault();
+				e.stopPropagation();
+				setIsOpen(false);
+			}
+		};
+
+		// Use capture phase to intercept ESC before other handlers
+		document.addEventListener("keydown", handleEscape, true);
+		return () => document.removeEventListener("keydown", handleEscape, true);
+	}, [isOpen]);
 
 	const handleSignOut = async () => {
 		try {
@@ -30,14 +46,23 @@ export default function Header() {
 					<Menu size={24} />
 				</button>
 				<h1 className="ml-4 text-xl font-semibold flex items-center gap-2">
-					<Link 
-						to="/screenshots" 
-						search={{ query: undefined, folder: undefined }}
-						className="flex items-center gap-2 hover:opacity-80 transition-opacity"
+					<button
+						onClick={() => {
+							navigate({ 
+								to: "/screenshots", 
+								search: {
+									folder: undefined,
+									query: undefined,
+									screenshot: undefined,
+								},
+								replace: true 
+							});
+						}}
+						className="flex items-center gap-2 hover:opacity-80 transition-opacity cursor-pointer"
 					>
 						<Receipt className="w-6 h-6 text-blue-400" />
 						<span>Receipts Tracker</span>
-					</Link>
+					</button>
 				</h1>
 			</header>
 

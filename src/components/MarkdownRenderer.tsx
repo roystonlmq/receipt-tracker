@@ -67,7 +67,7 @@ export function MarkdownRenderer({
 		}
 	}, [content]);
 
-	// Process the HTML to add hashtag highlighting
+	// Process the HTML to add hashtag highlighting and list styling
 	const processedContent = useMemo(() => {
 		if (!renderedContent) return null;
 
@@ -132,6 +132,15 @@ export function MarkdownRenderer({
 				const element = node as Element;
 				const newElement = element.cloneNode(false) as Element;
 
+				// Add list styling to ul and ol elements
+				if (element.tagName === 'UL') {
+					newElement.setAttribute('style', 'list-style-type: disc; padding-left: 1.5rem; margin: 0.5rem 0;');
+				} else if (element.tagName === 'OL') {
+					newElement.setAttribute('style', 'list-style-type: decimal; padding-left: 1.5rem; margin: 0.5rem 0;');
+				} else if (element.tagName === 'LI') {
+					newElement.setAttribute('style', 'display: list-item; margin: 0.25rem 0;');
+				}
+
 				for (const child of Array.from(element.childNodes)) {
 					newElement.appendChild(processNode(child));
 				}
@@ -157,7 +166,7 @@ export function MarkdownRenderer({
 
 	return (
 		<div
-			className={`text-sm text-white/90 leading-relaxed prose prose-invert prose-sm max-w-none ${className}`}
+			className={`text-sm text-white/90 leading-relaxed ${className}`}
 			// biome-ignore lint/security/noDangerouslySetInnerHtml: Content is sanitized with DOMPurify
 			dangerouslySetInnerHTML={{ __html: processedContent }}
 		/>

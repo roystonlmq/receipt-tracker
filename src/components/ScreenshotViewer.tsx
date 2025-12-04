@@ -5,7 +5,6 @@ import type { Screenshot } from "@/types/screenshot";
 import { updateScreenshotNotes, downloadScreenshotWithNotes, deleteScreenshot, toggleDownloadStatus, renameScreenshot } from "@/server/screenshots";
 import { downloadFileWithPicker } from "@/utils/fileSystem";
 import { useToast } from "@/hooks/useToast";
-import { ToastContainer } from "@/components/Toast";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { EnhancedNotesInput } from "@/components/EnhancedNotesInput";
 import { MarkdownRenderer } from "@/components/MarkdownRenderer";
@@ -21,6 +20,8 @@ interface ScreenshotViewerProps {
 	onNavigate?: (direction: "prev" | "next") => void;
 	onUpdate?: (updatedScreenshot: Screenshot) => void;
 	onHashtagClick?: (hashtag: string) => void;
+	onSuccess?: (message: string) => void;
+	onError?: (message: string) => void;
 }
 
 export function ScreenshotViewer({
@@ -30,6 +31,8 @@ export function ScreenshotViewer({
 	onNavigate,
 	onUpdate,
 	onHashtagClick,
+	onSuccess,
+	onError,
 }: ScreenshotViewerProps) {
 	const [notes, setNotes] = useState(screenshot.notes || "");
 	const [isSaving, setIsSaving] = useState(false);
@@ -482,22 +485,33 @@ export function ScreenshotViewer({
 				},
 			});
 
-			toast.success("Screenshot deleted successfully!");
-			
-			// Close viewer and navigate back
+			// Navigate to clear URL params FIRST (before closing viewer)
 			navigate({
 				to: "/screenshots",
 				search: (prev: any) => {
 					const { screenshot: _, ...rest } = prev;
 					return rest;
 				},
-				replace: false,
+				replace: true, // Use replace to avoid adding to history
 			});
+			
+			// Then close viewer (this triggers refresh in parent)
 			onClose();
+			
+			// Show success toast using parent's toast system (persists after viewer closes)
+			if (onSuccess) {
+				onSuccess("Screenshot deleted successfully!");
+			} else {
+				toast.success("Screenshot deleted successfully!");
+			}
 		} catch (error) {
 			console.error("Failed to delete screenshot:", error);
-			toast.error("Failed to delete screenshot. Please try again.", 5000);
-		} finally {
+			const errorMessage = "Failed to delete screenshot. Please try again.";
+			if (onError) {
+				onError(errorMessage);
+			} else {
+				toast.error(errorMessage, 5000);
+			}
 			setIsDeleting(false);
 		}
 	};
@@ -568,7 +582,6 @@ export function ScreenshotViewer({
 
 	return (
 		<>
-			<ToastContainer toasts={toast.toasts} onClose={toast.removeToast} />
 			<ConfirmDialog
 				isOpen={showDiscardDialog}
 				title="Discard Changes?"

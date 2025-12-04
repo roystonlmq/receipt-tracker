@@ -212,6 +212,61 @@ This script extracts hashtags from existing screenshot notes and populates the t
   - Add troubleshooting guide for tag-related issues
   - _Requirements: Technical documentation_
 
+### Task 8: Fix Hashtag Highlighting in Editor
+
+The hashtag highlighting in the notes editor appears blurred and uses the wrong color. This task fixes the overlay rendering to match the preview styling.
+
+- [ ] 8.1 Fix HighlightedTextarea overlay rendering
+  - Change overlay from `text-transparent` to `text-white/90` for normal text
+  - Keep hashtag highlighting as `text-blue-400 font-semibold`
+  - Change textarea from `text-white/90` to `text-transparent`
+  - Ensure caret remains visible with `caret-white`
+  - Verify hashtags appear in deep blue (#60A5FA) matching the preview
+  - Test scroll synchronization still works correctly
+  - _Requirements: Visual consistency between editor and preview_
+
+- [ ]* 8.2 Test hashtag highlighting consistency
+  - Verify hashtags in editor match preview color exactly
+  - Test with multiple hashtags in same line
+  - Test with hashtags at different scroll positions
+  - Verify no blur or pixelation in highlighted text
+  - _Requirements: Visual quality assurance_
+
+### Task 9: Fix Markdown List Rendering
+
+Markdown lists do not display bullet points or numbers. This task fixes the list styling in the MarkdownNotes component.
+
+- [ ] 9.1 Fix list marker display in MarkdownNotes
+  - Update `ul` component to use `list-disc pl-5` with visible markers
+  - Update `ol` component to use `list-decimal pl-5` with visible markers
+  - Add `marker:text-white/70` for consistent marker styling
+  - Remove `list-inside` if it's causing issues (use padding instead)
+  - Ensure proper spacing between list items
+  - Test with both bulleted (-) and numbered (1., 2.) lists
+  - Test with nested lists to verify indentation
+  - _Requirements: Proper markdown list rendering_
+
+- [ ]* 9.2 Test markdown list rendering
+  - Create test notes with bulleted lists
+  - Create test notes with numbered lists
+  - Create test notes with nested lists
+  - Verify markers are visible and properly positioned
+  - Verify spacing is consistent
+  - _Requirements: List rendering quality assurance_
+
+### Task 10: Fix Screenshot Deletion UX
+
+Screenshot deletion succeeds but the viewer stays open, causing confusion and potential double-delete attempts. This task fixes the UX flow.
+
+- [ ] 10.1 Fix ScreenshotViewer delete handler
+  - Move `onClose()` call to immediately after successful deletion
+  - Ensure success toast appears before navigation
+  - Remove `finally` block that resets `isDeleting` (component unmounts)
+  - Only reset `isDeleting` in error case
+  - Test deletion flow: viewer should close immediately, toast should appear
+  - Verify user cannot attempt to delete the same screenshot twice
+  - _Requirements: Proper UX for delete operations_
+
 ## Implementation Notes
 
 ### Core Functionality Status

@@ -856,6 +856,102 @@ migrateTags()
 4. **Authorization**: Verify user owns screenshot before AI generation
 5. **Cost Monitoring**: Track token usage per user to detect abuse
 
+### Known Issues and Fixes
+
+#### Issue 1: Hashtag Highlighting in Editor
+
+**Problem**: The hashtag highlighting in the notes editor appears blurred, pixelated, and uses a light blue color instead of the deep blue used in the preview. This is caused by the overlay rendering technique where:
+- The overlay div has `text-transparent` class, making highlighted hashtags invisible
+- The textarea has `text-white/90`, so the actual text shows through without highlighting
+- The result is a confusing visual where hashtags don't appear properly styled
+
+**Root Cause**: The HighlightedTextarea component uses an overlay approach where styled HTML is rendered behind a transparent textarea. However, the overlay text is set to `text-transparent`, which defeats the purpose of the highlighting.
+
+**Solution**: 
+1. Make the textarea text transparent using `text-transparent` or `caret-white` with transparent text
+2. Make the overlay text visible with proper styling (`text-white/90` for normal text, `text-blue-400` for hashtags)
+3. Ensure the overlay is positioned correctly to align with textarea text
+4. Use the same blue color (`text-blue-400` = #60A5FA) as the preview
+
+**Implementation**:
+```typescript
+// In HighlightedTextarea.tsx
+// Overlay should have visible text with highlighting
+<div className="... text-white/90 ...">
+  {/* HTML with <span class="text-blue-400 font-semibold">#tag</span> */}
+</div>
+
+// Textarea should have transparent text but visible caret
+<textarea className="... text-transparent caret-white ..." />
+```
+
+#### Issue 2: Markdown List Rendering
+
+**Problem**: Markdown lists (both bulleted with `-` and numbered with `1.`) do not display their markers (bullets or numbers). The list items appear as plain text broken into lines without any visual indication of list structure.
+
+**Root Cause**: The MarkdownNotes component uses ReactMarkdown with custom components, but the list styling is not properly configured. The `list-disc` and `list-decimal` classes are applied, but the markers may not be visible due to:
+1. Missing or incorrect list-style-position
+2. Insufficient padding/margin for markers to appear
+3. Potential CSS conflicts with Tailwind prose classes
+
+**Solution**:
+1. Ensure list items use `list-disc` (for ul) and `list-decimal` (for ol) with `list-inside` or proper padding
+2. Add explicit styling for list markers to ensure visibility
+3. Test with both simple and nested lists
+4. Verify spacing between list items is consistent
+
+**Implementation**:
+```typescript
+// In MarkdownNotes.tsx
+ul: ({ children }) => (
+  <ul className="list-disc pl-5 space-y-1 my-2 marker:text-white/70">
+    {children}
+  </ul>
+),
+ol: ({ children }) => (
+  <ol className="list-decimal pl-5 space-y-1 my-2 marker:text-white/70">
+    {children}
+  </ol>
+),
+```
+
+#### Issue 3: Screenshot Deletion UX
+
+**Problem**: When a user deletes a screenshot, the deletion succeeds on the server, but the ScreenshotViewer remains open showing the deleted screenshot. If the user tries to delete again, they get an error because the screenshot no longer exists. Additionally, there's no success toast notification to confirm the deletion.
+
+**Root Cause**: The ScreenshotViewer's delete handler was calling `onClose()` after navigation, and the order of operations wasn't optimal for user feedback. The viewer should close immediately upon successful deletion to prevent confusion.
+
+**Solution**:
+1. Call `onClose()` immediately after successful deletion (before navigation)
+2. Show success toast to confirm the deletion
+3. Navigate to clear URL parameters
+4. Remove the `finally` block that resets `isDeleting` state (component unmounts anyway)
+
+**Implementation**:
+```typescript
+// In src/components/ScreenshotViewer.tsx - handleConfirmDelete
+const handleConfirmDelete = async () => {
+  setIsDeleting(true);
+  setShowDeleteDialog(false);
+
+  try {
+    await deleteScreenshot({ data: { id: screenshot.id, userId: screenshot.userId } });
+    
+    // Close viewer immediately
+    onClose();
+    
+    // Show success toast
+    toast.success("Screenshot deleted successfully!");
+    
+    // Navigate back to clear URL params
+    navigate({ to: "/screenshots", search: (prev) => { ... } });
+  } catch (error) {
+    toast.error("Failed to delete screenshot. Please try again.");
+    setIsDeleting(false); // Only reset on error
+  }
+};
+```
+
 ### Future Enhancements
 
 1. **Tag Renaming**: Allow users to rename tags across all screenshots
