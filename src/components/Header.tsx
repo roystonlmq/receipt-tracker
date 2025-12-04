@@ -30,7 +30,11 @@ export default function Header() {
 					<Menu size={24} />
 				</button>
 				<h1 className="ml-4 text-xl font-semibold flex items-center gap-2">
-					<Link to="/" className="flex items-center gap-2 hover:opacity-80 transition-opacity">
+					<Link 
+						to="/screenshots" 
+						search={{ query: undefined, folder: undefined }}
+						className="flex items-center gap-2 hover:opacity-80 transition-opacity"
+					>
 						<Receipt className="w-6 h-6 text-blue-400" />
 						<span>Receipts Tracker</span>
 					</Link>

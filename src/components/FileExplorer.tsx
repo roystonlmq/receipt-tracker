@@ -762,6 +762,7 @@ export function FileExplorer({
 										onRename={handleRename}
 										onDelete={handleDelete}
 										onHashtagClick={handleHashtagClick}
+										onUpdate={handleViewerUpdate}
 										selectionMode={selectionMode}
 									/>
 									{/* Folder indication */}
@@ -984,6 +985,7 @@ export function FileExplorer({
 									onRename={handleRename}
 									onDelete={handleDelete}
 									onHashtagClick={handleHashtagClick}
+									onUpdate={handleViewerUpdate}
 									selectionMode={selectionMode}
 								/>
 							))}

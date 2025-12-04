@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { getTagSuggestions } from "@/server/tags";
 import type { TagSuggestion } from "@/server/tags";
 import { useCursorPosition } from "@/hooks/useCursorPosition";
+import { HighlightedTextarea } from "./HighlightedTextarea";
 
 interface EnhancedNotesInputProps {
 	value: string;
@@ -82,9 +83,75 @@ export function EnhancedNotesInput({
 		[onChange, userId],
 	);
 
-	// Handle keyboard navigation
+	// Handle keyboard navigation and tab key
 	const handleKeyDown = useCallback(
 		(e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+			// Handle tab key for indentation (when NOT showing suggestions)
+			if (e.key === "Tab" && (!showSuggestions || suggestions.length === 0)) {
+				e.preventDefault();
+				
+				const textarea = e.currentTarget;
+				const start = textarea.selectionStart;
+				const end = textarea.selectionEnd;
+				const selectedText = value.substring(start, end);
+				const hasSelection = start !== end;
+
+				if (hasSelection) {
+					// Multi-line indentation
+					const lines = selectedText.split("\n");
+					const indentedLines = e.shiftKey
+						? lines.map((line) => line.replace(/^(\t|  )/, "")) // Remove indent
+						: lines.map((line) => `  ${line}`); // Add indent
+
+					const newText =
+						value.substring(0, start) +
+						indentedLines.join("\n") +
+						value.substring(end);
+
+					onChange(newText);
+
+					// Restore selection
+					setTimeout(() => {
+						const newStart = start;
+						const newEnd = start + indentedLines.join("\n").length;
+						textarea.setSelectionRange(newStart, newEnd);
+					}, 0);
+				} else {
+					// Single cursor - insert or remove indentation
+					if (e.shiftKey) {
+						// Shift+Tab: Remove indentation at cursor position
+						const lineStart = value.lastIndexOf("\n", start - 1) + 1;
+						const lineText = value.substring(lineStart, start);
+						
+						if (lineText.match(/^(\t|  )/)) {
+							const newText =
+								value.substring(0, lineStart) +
+								lineText.replace(/^(\t|  )/, "") +
+								value.substring(start);
+							onChange(newText);
+
+							// Adjust cursor position
+							setTimeout(() => {
+								const removed = lineText.match(/^(\t|  )/)?.[0].length || 0;
+								textarea.setSelectionRange(start - removed, start - removed);
+							}, 0);
+						}
+					} else {
+						// Tab: Insert indentation
+						const newText =
+							value.substring(0, start) + "  " + value.substring(end);
+						onChange(newText);
+
+						// Move cursor after inserted spaces
+						setTimeout(() => {
+							textarea.setSelectionRange(start + 2, start + 2);
+						}, 0);
+					}
+				}
+				return;
+			}
+
+			// Handle suggestions dropdown navigation
 			if (!showSuggestions || suggestions.length === 0) return;
 
 			switch (e.key) {
@@ -117,7 +184,7 @@ export function EnhancedNotesInput({
 					break;
 			}
 		},
-		[showSuggestions, suggestions, selectedIndex],
+		[showSuggestions, suggestions, selectedIndex, value, onChange],
 	);
 
 	// Insert selected tag at cursor position
@@ -191,15 +258,18 @@ export function EnhancedNotesInput({
 
 	return (
 		<div className="relative h-full">
-			{/* Actual textarea */}
-			<textarea
-				ref={textareaRef}
-				value={value}
-				onChange={handleInputChange}
-				onKeyDown={handleKeyDown}
-				placeholder={placeholder}
-				className={`w-full h-full p-3 bg-white/5 border border-white/10 rounded-lg text-white/90 placeholder-white/40 focus:outline-none focus:ring-2 focus:ring-blue-500/50 resize-none ${className}`}
-			/>
+			{/* Textarea with hashtag highlighting overlay */}
+			<div className="w-full h-full bg-white/5 border border-white/10 rounded-lg focus-within:ring-2 focus-within:ring-blue-500/50 overflow-hidden">
+				<HighlightedTextarea
+					value={value}
+					onChange={handleInputChange}
+					onKeyDown={handleKeyDown}
+					placeholder={placeholder}
+					textareaRef={textareaRef}
+					autoFocus={autoFocus}
+					className={className}
+				/>
+			</div>
 
 			{/* Tag suggestions dropdown - cursor-following with fallback */}
 			{showSuggestions && suggestions.length > 0 && (() => {

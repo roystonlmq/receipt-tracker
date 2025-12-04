@@ -126,13 +126,13 @@ export const uploadScreenshot = createServerFn({ method: "POST" })
 				console.log("Connected to database");
 				
 				const result = await client.query(
-					`INSERT INTO screenshots (user_id, filename, original_filename, image_data, mime_type, file_size, capture_date, folder_date, notes)
-					 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+					`INSERT INTO screenshots (user_id, filename, original_filename, image_data, mime_type, file_size, capture_date, folder_date, notes, downloaded)
+					 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 					 RETURNING id, user_id as "userId", filename, original_filename as "originalFilename", 
 					           image_data as "imageData", mime_type as "mimeType", file_size as "fileSize",
 					           capture_date as "captureDate", upload_date as "uploadDate", notes, folder_date as "folderDate",
-					           created_at as "createdAt", updated_at as "updatedAt"`,
-					[userId, filename, originalFilename, imageData, file.type, file.size, captureDate, folderDate, null]
+					           downloaded, created_at as "createdAt", updated_at as "updatedAt"`,
+					[userId, filename, originalFilename, imageData, file.type, file.size, captureDate, folderDate, null, false]
 				);
 				
 				const screenshot = result.rows[0];
@@ -184,7 +184,7 @@ export const getScreenshots = createServerFn({ method: "GET" })
 					SELECT id, user_id as "userId", filename, original_filename as "originalFilename", 
 					       image_data as "imageData", mime_type as "mimeType", file_size as "fileSize",
 					       capture_date as "captureDate", upload_date as "uploadDate", notes, 
-					       folder_date as "folderDate", created_at as "createdAt", updated_at as "updatedAt"
+					       folder_date as "folderDate", downloaded, created_at as "createdAt", updated_at as "updatedAt"
 					FROM screenshots 
 					WHERE user_id = $1
 				`;
@@ -257,7 +257,7 @@ export const renameScreenshot = createServerFn({ method: "POST" })
 					 RETURNING id, user_id as "userId", filename, original_filename as "originalFilename", 
 					           image_data as "imageData", mime_type as "mimeType", file_size as "fileSize",
 					           capture_date as "captureDate", upload_date as "uploadDate", notes, folder_date as "folderDate",
-					           created_at as "createdAt", updated_at as "updatedAt"`,
+					           downloaded, created_at as "createdAt", updated_at as "updatedAt"`,
 					[newFilename, id]
 				);
 
@@ -302,6 +302,16 @@ export const deleteScreenshot = createServerFn({ method: "POST" })
 
 				if (result.rows.length === 0) {
 					throw new Error("Screenshot not found or access denied");
+				}
+
+				// Clean up orphaned tags after deletion
+				try {
+					const { cleanupOrphanedTags } = await import("./tags");
+					await cleanupOrphanedTags({ data: { userId } });
+					console.log("[deleteScreenshot] Orphaned tags cleaned up");
+				} catch (error) {
+					console.error("[deleteScreenshot] Failed to cleanup orphaned tags:", error);
+					// Don't throw - tag cleanup failure shouldn't block deletion
 				}
 
 				return { success: true };
@@ -354,7 +364,7 @@ export const updateScreenshotNotes = createServerFn({ method: "POST" })
 					 RETURNING id, user_id as "userId", filename, original_filename as "originalFilename", 
 					           image_data as "imageData", mime_type as "mimeType", file_size as "fileSize",
 					           capture_date as "captureDate", upload_date as "uploadDate", notes, folder_date as "folderDate",
-					           created_at as "createdAt", updated_at as "updatedAt"`,
+					           downloaded, created_at as "createdAt", updated_at as "updatedAt"`,
 					[notes, id]
 				);
 
@@ -416,7 +426,7 @@ export const getScreenshotById = createServerFn({ method: "GET" })
 					`SELECT id, user_id as "userId", filename, original_filename as "originalFilename",
 					        image_data as "imageData", mime_type as "mimeType", file_size as "fileSize",
 					        capture_date as "captureDate", upload_date as "uploadDate", notes,
-					        folder_date as "folderDate", created_at as "createdAt", updated_at as "updatedAt"
+					        folder_date as "folderDate", downloaded, created_at as "createdAt", updated_at as "updatedAt"
 					 FROM screenshots
 					 WHERE id = $1 AND user_id = $2`,
 					[id, userId],
@@ -554,6 +564,61 @@ export const batchMoveScreenshots = createServerFn({ method: "POST" })
 	});
 
 /**
+ * Toggle the downloaded status of a screenshot
+ */
+export const toggleDownloadStatus = createServerFn({ method: "POST" })
+	.inputValidator((input: { id: number; userId: number; downloaded: boolean }) => input)
+	.handler(async ({ data }) => {
+		// Validation
+		if (!data.id || !data.userId) {
+			throw new Error("ID and user ID are required");
+		}
+
+		try {
+			const { id, userId, downloaded } = data;
+
+			// Use raw pg client to bypass Drizzle ORM issues in Workers
+			const client = new Client({
+				connectionString: process.env.DATABASE_URL!,
+			});
+			
+			try {
+				await client.connect();
+				
+				// Verify ownership
+				const checkResult = await client.query(
+					`SELECT id FROM screenshots WHERE id = $1 AND user_id = $2`,
+					[id, userId]
+				);
+
+				if (checkResult.rows.length === 0) {
+					throw new Error("Screenshot not found or access denied");
+				}
+
+				// Update downloaded status
+				const result = await client.query(
+					`UPDATE screenshots 
+					 SET downloaded = $1, updated_at = NOW()
+					 WHERE id = $2
+					 RETURNING id, user_id as "userId", filename, original_filename as "originalFilename", 
+					           image_data as "imageData", mime_type as "mimeType", file_size as "fileSize",
+					           capture_date as "captureDate", upload_date as "uploadDate", notes, folder_date as "folderDate",
+					           downloaded, created_at as "createdAt", updated_at as "updatedAt"`,
+					[downloaded, id]
+				);
+
+				const updated = result.rows[0];
+				return { success: true, screenshot: updated };
+			} finally {
+				await client.end();
+			}
+		} catch (error) {
+			console.error("Toggle download status failed:", error);
+			throw new Error("Failed to update download status. Please try again.");
+		}
+	});
+
+/**
  * Download a screenshot with its notes as a bundled file
  */
 export const downloadScreenshotWithNotes = createServerFn({ method: "GET" })
@@ -580,7 +645,7 @@ export const downloadScreenshotWithNotes = createServerFn({ method: "GET" })
 					`SELECT id, user_id as "userId", filename, original_filename as "originalFilename", 
 					        image_data as "imageData", mime_type as "mimeType", file_size as "fileSize",
 					        capture_date as "captureDate", upload_date as "uploadDate", notes, 
-					        folder_date as "folderDate", created_at as "createdAt", updated_at as "updatedAt"
+					        folder_date as "folderDate", downloaded, created_at as "createdAt", updated_at as "updatedAt"
 					 FROM screenshots WHERE id = $1 AND user_id = $2`,
 					[id, userId]
 				);

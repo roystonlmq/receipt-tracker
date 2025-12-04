@@ -314,3 +314,196 @@ export async function generateNotesFromImage(
 		throw error;
 	}
 }
+
+/**
+ * Build AI prompt for refining existing notes
+ */
+export function buildRefinePrompt(existingNotes: string, userTags: string[]): string {
+	const tagContext =
+		userTags.length > 0
+			? `\n\nUser's existing tags: ${userTags.map((t) => `#${t}`).join(", ")}`
+			: "";
+
+	return `You are refining and improving existing notes. The user has provided these notes:
+
+${existingNotes}
+
+Please improve these notes by:
+- Fixing grammar and spelling errors
+- Improving clarity and organization
+- Ensuring bullet points are concise and actionable
+- Maintaining the original meaning and information
+- Keeping any existing hashtags (people names, projects, etc.)
+- Adding any missing hashtags for people mentioned (format: #firstname or #firstname-lastname in lowercase)
+
+At the very end, add a separate section:
+"Suggested tags: [list 2-3 additional relevant tags for project/category, without the # symbol]"${tagContext}
+
+Return the refined notes in the same bullet point format.`;
+}
+
+/**
+ * Call OpenAI API for text refinement (no image)
+ */
+export async function callOpenAIForText(
+	config: AIConfig,
+	prompt: string,
+): Promise<AIGenerationResult> {
+	const response = await fetch("https://api.openai.com/v1/chat/completions", {
+		method: "POST",
+		headers: {
+			"Content-Type": "application/json",
+			Authorization: `Bearer ${config.apiKey}`,
+		},
+		body: JSON.stringify({
+			model: config.model || "gpt-4o-mini",
+			messages: [
+				{
+					role: "user",
+					content: prompt,
+				},
+			],
+			max_tokens: 1000,
+		}),
+	});
+
+	if (!response.ok) {
+		const error = await response.json();
+		throw new Error(
+			`OpenAI API error: ${error.error?.message || response.statusText}`,
+		);
+	}
+
+	const data = await response.json();
+	const notes = data.choices?.[0]?.message?.content || "";
+	const tokensUsed = data.usage?.total_tokens;
+
+	return {
+		notes,
+		tokensUsed,
+		provider: "openai",
+	};
+}
+
+/**
+ * Call Anthropic Claude API for text refinement (no image)
+ */
+export async function callClaudeForText(
+	config: AIConfig,
+	prompt: string,
+): Promise<AIGenerationResult> {
+	const response = await fetch("https://api.anthropic.com/v1/messages", {
+		method: "POST",
+		headers: {
+			"Content-Type": "application/json",
+			"x-api-key": config.apiKey,
+			"anthropic-version": "2023-06-01",
+		},
+		body: JSON.stringify({
+			model: config.model || "claude-3-5-sonnet-20241022",
+			max_tokens: 1000,
+			messages: [
+				{
+					role: "user",
+					content: prompt,
+				},
+			],
+		}),
+	});
+
+	if (!response.ok) {
+		const error = await response.json();
+		throw new Error(
+			`Claude API error: ${error.error?.message || response.statusText}`,
+		);
+	}
+
+	const data = await response.json();
+	const notes =
+		data.content?.find((c: any) => c.type === "text")?.text || "";
+	const tokensUsed = data.usage?.input_tokens + data.usage?.output_tokens;
+
+	return {
+		notes,
+		tokensUsed,
+		provider: "anthropic",
+	};
+}
+
+/**
+ * Call Google Gemini API for text refinement (no image)
+ */
+export async function callGeminiForText(
+	config: AIConfig,
+	prompt: string,
+): Promise<AIGenerationResult> {
+	const response = await fetch(
+		`https://generativelanguage.googleapis.com/v1beta/models/${config.model || "gemini-1.5-flash"}:generateContent?key=${config.apiKey}`,
+		{
+			method: "POST",
+			headers: {
+				"Content-Type": "application/json",
+			},
+			body: JSON.stringify({
+				contents: [
+					{
+						parts: [
+							{
+								text: prompt,
+							},
+						],
+					},
+				],
+				generationConfig: {
+					maxOutputTokens: 1000,
+				},
+			}),
+		},
+	);
+
+	if (!response.ok) {
+		const error = await response.json();
+		throw new Error(
+			`Gemini API error: ${error.error?.message || response.statusText}`,
+		);
+	}
+
+	const data = await response.json();
+	const notes = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
+	const tokensUsed = data.usageMetadata?.totalTokenCount;
+
+	return {
+		notes,
+		tokensUsed,
+		provider: "gemini",
+	};
+}
+
+/**
+ * Refine existing notes using AI
+ */
+export async function refineNotesWithAI(
+	existingNotes: string,
+	userTags: string[] = [],
+): Promise<AIGenerationResult> {
+	const config = getAIConfig();
+
+	if (!config) {
+		throw new Error("AI is not configured. Please set API keys in .env.local");
+	}
+
+	const prompt = buildRefinePrompt(existingNotes, userTags);
+
+	try {
+		if (config.provider === "openai") {
+			return await callOpenAIForText(config, prompt);
+		}
+		if (config.provider === "anthropic") {
+			return await callClaudeForText(config, prompt);
+		}
+		return await callGeminiForText(config, prompt);
+	} catch (error) {
+		console.error("AI refinement failed:", error);
+		throw error;
+	}
+}

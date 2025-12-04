@@ -1,7 +1,9 @@
 import { useState, useRef, useEffect } from "react";
-import { StickyNote, Trash2, Edit2 } from "lucide-react";
+import { StickyNote, Trash2, Edit2, Check } from "lucide-react";
 import type { Screenshot } from "@/types/screenshot";
 import { highlightHashtagsClickable } from "@/utils/highlightHashtags";
+import { toggleDownloadStatus } from "@/server/screenshots";
+import { useToast } from "@/hooks/useToast";
 
 interface ScreenshotCardProps {
 	screenshot: Screenshot;
@@ -11,6 +13,7 @@ interface ScreenshotCardProps {
 	onDelete: (id: number) => void;
 	onView: (id: number) => void;
 	onHashtagClick?: (hashtag: string) => void;
+	onUpdate?: (updatedScreenshot: Screenshot) => void;
 	selectionMode: boolean;
 }
 
@@ -22,11 +25,13 @@ export function ScreenshotCard({
 	onRename,
 	onDelete,
 	onHashtagClick,
+	onUpdate,
 	selectionMode,
 }: ScreenshotCardProps) {
 	const [isRenaming, setIsRenaming] = useState(false);
 	const [newName, setNewName] = useState("");
 	const inputRef = useRef<HTMLInputElement>(null);
+	const toast = useToast();
 
 	useEffect(() => {
 		if (isRenaming && inputRef.current) {
@@ -95,6 +100,34 @@ export function ScreenshotCard({
 		}
 	};
 
+	const handleToggleDownloadStatus = async (e: React.MouseEvent) => {
+		e.stopPropagation();
+		e.preventDefault();
+
+		try {
+			const result = await toggleDownloadStatus({
+				data: {
+					id: screenshot.id,
+					userId: screenshot.userId,
+					downloaded: !screenshot.downloaded,
+				},
+			});
+
+			if (result.success && result.screenshot && onUpdate) {
+				onUpdate(result.screenshot);
+				toast.success(
+					result.screenshot.downloaded
+						? "Marked as downloaded"
+						: "Unmarked as downloaded",
+					2000,
+				);
+			}
+		} catch (error) {
+			console.error("Failed to toggle download status:", error);
+			toast.error("Failed to update download status", 3000);
+		}
+	};
+
 	const formatDate = (date: Date) => {
 		return new Date(date).toLocaleString("en-US", {
 			month: "short",
@@ -105,23 +138,36 @@ export function ScreenshotCard({
 	};
 
 	return (
-		<div
-			className={`relative group cursor-pointer rounded-lg overflow-hidden border-2 transition-all ${
-				isSelected
-					? "border-blue-500 ring-2 ring-blue-500/50"
-					: "border-white/10 hover:border-white/30"
-			}`}
-			onClick={handleClick}
-			onKeyDown={handleKeyDown}
-			tabIndex={0}
-		>
+		<>
+			<div
+				className={`relative group cursor-pointer rounded-lg overflow-hidden border-2 transition-all ${
+					isSelected
+						? "border-blue-500 ring-2 ring-blue-500/50"
+						: "border-white/10 hover:border-white/30"
+				}`}
+				onClick={handleClick}
+				onKeyDown={handleKeyDown}
+				tabIndex={0}
+			>
 			{/* Thumbnail */}
-			<div className="aspect-video bg-black/30 flex items-center justify-center overflow-hidden">
+			<div className="aspect-video bg-black/30 flex items-center justify-center overflow-hidden relative">
 				<img
 					src={screenshot.imageData}
 					alt={screenshot.filename}
 					className="w-full h-full object-cover"
 				/>
+				
+				{/* Download status checkmark - positioned in top-right of thumbnail */}
+				{screenshot.downloaded && (
+					<button
+						type="button"
+						onClick={handleToggleDownloadStatus}
+						className="absolute top-2 right-2 p-1.5 bg-green-600/90 hover:bg-green-700 rounded-full transition-colors shadow-lg"
+						title="Downloaded (click to unmark)"
+					>
+						<Check className="w-3.5 h-3.5 text-white" />
+					</button>
+				)}
 			</div>
 
 			{/* Checkbox - always visible in selection mode, shown on hover otherwise */}
@@ -236,6 +282,7 @@ export function ScreenshotCard({
 					</div>
 				)}
 			</div>
-		</div>
+			</div>
+		</>
 	);
 }

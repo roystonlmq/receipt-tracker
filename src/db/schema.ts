@@ -1,4 +1,5 @@
 import {
+	boolean,
 	index,
 	integer,
 	pgTable,
@@ -40,6 +41,7 @@ export const screenshots = pgTable(
 		uploadDate: timestamp("upload_date").defaultNow().notNull(),
 		notes: text("notes"),
 		folderDate: text("folder_date").notNull(), // DDMMYY format for grouping
+		downloaded: boolean("downloaded").default(false).notNull(), // Track if screenshot has been downloaded
 		createdAt: timestamp("created_at").defaultNow().notNull(),
 		updatedAt: timestamp("updated_at").defaultNow().notNull(),
 	},
@@ -47,6 +49,7 @@ export const screenshots = pgTable(
 		userIdIdx: index("screenshots_user_id_idx").on(table.userId),
 		folderDateIdx: index("screenshots_folder_date_idx").on(table.folderDate),
 		uploadDateIdx: index("screenshots_upload_date_idx").on(table.uploadDate),
+		userDownloadedIdx: index("screenshots_user_downloaded_idx").on(table.userId, table.downloaded),
 	}),
 );
 

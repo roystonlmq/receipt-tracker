@@ -245,3 +245,63 @@ export const searchByTags = createServerFn({ method: "GET" })
 			throw new Error("Failed to search screenshots. Please try again.");
 		}
 	});
+
+/**
+ * Clean up orphaned tags (tags that no longer reference any screenshots)
+ */
+export const cleanupOrphanedTags = createServerFn({ method: "POST" })
+	.inputValidator((input: { userId: number }) => input)
+	.handler(async ({ data }) => {
+		const { userId } = data;
+
+		try {
+			const client = new Client({
+				connectionString: process.env.DATABASE_URL!,
+			});
+
+			try {
+				await client.connect();
+
+				// Get all tags for this user
+				const tagsResult = await client.query(
+					`SELECT tag FROM tags WHERE user_id = $1`,
+					[userId]
+				);
+
+				const allTags = tagsResult.rows.map(row => row.tag);
+				const tagsToDelete: string[] = [];
+
+				// Check each tag to see if it's still referenced in any screenshot notes
+				for (const tag of allTags) {
+					const screenshotsResult = await client.query(
+						`SELECT COUNT(*) as count FROM screenshots 
+						 WHERE user_id = $1 AND notes ILIKE $2`,
+						[userId, `%#${tag}%`]
+					);
+
+					const count = Number.parseInt(screenshotsResult.rows[0].count, 10);
+					if (count === 0) {
+						tagsToDelete.push(tag);
+					}
+				}
+
+				// Delete orphaned tags
+				if (tagsToDelete.length > 0) {
+					for (const tag of tagsToDelete) {
+						await client.query(
+							`DELETE FROM tags WHERE user_id = $1 AND tag = $2`,
+							[userId, tag]
+						);
+					}
+				}
+
+				return { success: true, deletedCount: tagsToDelete.length, deletedTags: tagsToDelete };
+			} finally {
+				await client.end();
+			}
+		} catch (error) {
+			console.error("Failed to cleanup orphaned tags:", error);
+			// Don't throw - tag cleanup is optional and shouldn't block deletion
+			return { success: false, deletedCount: 0, deletedTags: [] };
+		}
+	});

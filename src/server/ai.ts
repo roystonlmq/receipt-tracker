@@ -97,6 +97,69 @@ export const generateNotesWithAI = createServerFn({ method: "POST" })
 	});
 
 /**
+ * Refine existing notes using AI
+ */
+export const refineNotesWithAI = createServerFn({ method: "POST" })
+	.inputValidator((input: { userId: number; existingNotes: string }) => input)
+	.handler(async ({ data }): Promise<GenerateNotesResult> => {
+		const { userId, existingNotes } = data;
+
+		// Check if AI is enabled
+		if (!isAIEnabled()) {
+			return {
+				success: false,
+				error:
+					"AI features are not configured. Please set OPENAI_API_KEY, ANTHROPIC_API_KEY, or GEMINI_API_KEY in your environment.",
+			};
+		}
+
+		try {
+			const client = new Client({
+				connectionString: process.env.DATABASE_URL!,
+			});
+
+			try {
+				await client.connect();
+
+				// Get user's existing tags for context
+				const userTagsResult = await getUserTags({
+					data: { userId, sortBy: "usage" },
+				});
+				const userTags = userTagsResult.slice(0, 10).map((t) => t.tag);
+
+				// Import refine function
+				const { refineNotesWithAI: refineNotes } = await import("@/utils/ai");
+
+				// Refine notes using AI
+				const result = await refineNotes(existingNotes, userTags);
+
+				// Log token usage
+				console.log(
+					`[AI] Refined notes for user ${userId} using ${result.provider}. Tokens: ${result.tokensUsed || "unknown"}`,
+				);
+
+				return {
+					success: true,
+					notes: result.notes,
+					tokensUsed: result.tokensUsed,
+					provider: result.provider,
+				};
+			} finally {
+				await client.end();
+			}
+		} catch (error) {
+			console.error("Failed to refine notes with AI:", error);
+			return {
+				success: false,
+				error:
+					error instanceof Error
+						? error.message
+						: "Failed to refine notes. Please try again.",
+			};
+		}
+	});
+
+/**
  * Check if AI features are available
  */
 export const checkAIAvailability = createServerFn({ method: "GET" }).handler(

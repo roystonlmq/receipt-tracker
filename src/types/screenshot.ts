@@ -10,6 +10,7 @@ export interface Screenshot {
 	uploadDate: Date;
 	notes: string | null;
 	folderDate: string;
+	downloaded: boolean;
 	createdAt: Date;
 	updatedAt: Date;
 }

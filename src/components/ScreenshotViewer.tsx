@@ -1,17 +1,18 @@
-import { useState, useEffect } from "react";
-import { X, ChevronLeft, ChevronRight, Download, Save, Sparkles } from "lucide-react";
+import { useState, useEffect, useRef } from "react";
+import { Save, Sparkles } from "lucide-react";
 import { useNavigate } from "@tanstack/react-router";
 import type { Screenshot } from "@/types/screenshot";
-import { updateScreenshotNotes, downloadScreenshotWithNotes } from "@/server/screenshots";
+import { updateScreenshotNotes, downloadScreenshotWithNotes, deleteScreenshot, toggleDownloadStatus, renameScreenshot } from "@/server/screenshots";
 import { downloadFileWithPicker } from "@/utils/fileSystem";
 import { useToast } from "@/hooks/useToast";
 import { ToastContainer } from "@/components/Toast";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { EnhancedNotesInput } from "@/components/EnhancedNotesInput";
-import { MarkdownNotes } from "@/components/MarkdownNotes";
+import { MarkdownRenderer } from "@/components/MarkdownRenderer";
 import { TagHintBanner } from "@/components/TagHintBanner";
 import { KeyboardHint } from "@/components/KeyboardHint";
-import { generateNotesWithAI, checkAIAvailability } from "@/server/ai";
+import { ViewerHeader, type ViewerHeaderRef } from "@/components/ViewerHeader";
+import { generateNotesWithAI, refineNotesWithAI, checkAIAvailability } from "@/server/ai";
 
 interface ScreenshotViewerProps {
 	screenshot: Screenshot;
@@ -36,11 +37,15 @@ export function ScreenshotViewer({
 	const [saveSuccess, setSaveSuccess] = useState(false);
 	const [isEditMode, setIsEditMode] = useState(false);
 	const [isGeneratingAI, setIsGeneratingAI] = useState(false);
+	const [isRefiningAI, setIsRefiningAI] = useState(false);
 	const [aiAvailable, setAiAvailable] = useState(false);
 	const [showDiscardDialog, setShowDiscardDialog] = useState(false);
+	const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+	const [isDeleting, setIsDeleting] = useState(false);
 	const [pendingAction, setPendingAction] = useState<"close" | "cancel" | null>(null);
 	const toast = useToast();
 	const navigate = useNavigate();
+	const headerRef = useRef<ViewerHeaderRef>(null);
 
 	// Check AI availability on mount
 	useEffect(() => {
@@ -125,14 +130,36 @@ export function ScreenshotViewer({
 		setPendingAction(null);
 	};
 
+	// Disable background scroll when viewer is open
+	useEffect(() => {
+		// Store original overflow style
+		const originalOverflow = document.body.style.overflow;
+		const originalPosition = document.body.style.position;
+		
+		// Disable scroll on body
+		document.body.style.overflow = "hidden";
+		document.body.style.position = "relative";
+		
+		// Cleanup: restore original scroll behavior
+		return () => {
+			document.body.style.overflow = originalOverflow;
+			document.body.style.position = originalPosition;
+		};
+	}, []);
+
 	// Handle keyboard shortcuts
 	useEffect(() => {
 		const handleKeyDown = (e: KeyboardEvent) => {
-			// Don't handle shortcuts if user is typing in textarea
-			const isTyping = document.activeElement?.tagName === "TEXTAREA";
+			// Check if user is typing in an input field
+			const target = e.target as HTMLElement;
+			const isTypingInTextarea = target.tagName === "TEXTAREA";
+			const isTypingInInput = target.tagName === "INPUT";
+			const isTyping = isTypingInTextarea || isTypingInInput;
 			
+			// ESC key - works from anywhere, highest priority
 			if (e.key === "Escape") {
 				e.preventDefault();
+				e.stopPropagation();
 				if (isEditMode) {
 					// Exit edit mode with confirmation if there are unsaved changes
 					handleCancelEdit();
@@ -140,7 +167,19 @@ export function ScreenshotViewer({
 					// Close viewer with confirmation if there are unsaved changes
 					handleClose();
 				}
-			} else if (e.key === "ArrowLeft" && onNavigate && !isTyping) {
+				return; // Stop processing other handlers
+			}
+			
+			// F2 key - rename screenshot (don't trigger when typing in textarea)
+			if (e.key === "F2" && !isTypingInTextarea) {
+				e.preventDefault();
+				// Trigger rename in ViewerHeader
+				headerRef.current?.startRename();
+				return;
+			}
+			
+			// Arrow navigation - don't trigger when typing
+			if (e.key === "ArrowLeft" && onNavigate && !isTyping) {
 				if (hasPrev) {
 					const prevScreenshot = allScreenshots[currentIndex - 1];
 					// Update URL with new screenshot ID
@@ -184,12 +223,18 @@ export function ScreenshotViewer({
 				if (!isDownloading) {
 					handleDownload();
 				}
+			} else if (e.key === "Delete" && !isTyping) {
+				// DEL key to delete screenshot
+				e.preventDefault();
+				if (!isDeleting) {
+					handleDelete();
+				}
 			}
 		};
 
 		window.addEventListener("keydown", handleKeyDown);
 		return () => window.removeEventListener("keydown", handleKeyDown);
-	}, [onClose, onNavigate, notes, screenshot.notes, isDownloading, isEditMode]);
+	}, [onClose, onNavigate, notes, screenshot.notes, isDownloading, isEditMode, isDeleting]);
 
 	// Determine if navigation is available
 	const currentIndex = allScreenshots.findIndex((s) => s.id === screenshot.id);
@@ -289,6 +334,40 @@ export function ScreenshotViewer({
 		}
 	};
 
+	const handleRefineWithAI = async () => {
+		if (!notes.trim()) {
+			toast.error("No notes to refine", 3000);
+			return;
+		}
+
+		setIsRefiningAI(true);
+
+		try {
+			const result = await refineNotesWithAI({
+				data: {
+					userId: screenshot.userId,
+					existingNotes: notes,
+				},
+			});
+
+			if (result.success && result.notes) {
+				// Replace notes with refined version
+				setNotes(result.notes.trim());
+				
+				toast.success(
+					`Notes refined with ${result.provider}! ${result.tokensUsed ? `(${result.tokensUsed} tokens)` : ""}`,
+				);
+			} else {
+				toast.error(result.error || "Failed to refine notes", 7000);
+			}
+		} catch (error) {
+			console.error("Failed to refine notes with AI:", error);
+			toast.error("Failed to refine notes. Please try again.", 5000);
+		} finally {
+			setIsRefiningAI(false);
+		}
+	};
+
 	const handleDownload = async () => {
 		setIsDownloading(true);
 
@@ -332,6 +411,24 @@ export function ScreenshotViewer({
 				}
 			}
 
+			// Mark as downloaded
+			try {
+				const statusResult = await toggleDownloadStatus({
+					data: {
+						id: screenshot.id,
+						userId: screenshot.userId,
+						downloaded: true,
+					},
+				});
+
+				if (statusResult.success && statusResult.screenshot && onUpdate) {
+					onUpdate(statusResult.screenshot);
+				}
+			} catch (error) {
+				console.error("Failed to update download status:", error);
+				// Don't block the success message if status update fails
+			}
+
 			// Show success message
 			if (imageResult.directoryName) {
 				toast.success(`Files saved to "${imageResult.directoryName}"`, 5000);
@@ -369,20 +466,89 @@ export function ScreenshotViewer({
 		}
 	};
 
-	const formatDate = (date: Date) => {
-		return new Date(date).toLocaleString("en-US", {
-			year: "numeric",
-			month: "long",
-			day: "numeric",
-			hour: "2-digit",
-			minute: "2-digit",
-		});
+	const handleDelete = () => {
+		setShowDeleteDialog(true);
 	};
 
-	const formatFileSize = (bytes: number) => {
-		if (bytes < 1024) return `${bytes} B`;
-		if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-		return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+	const handleConfirmDelete = async () => {
+		setIsDeleting(true);
+		setShowDeleteDialog(false);
+
+		try {
+			await deleteScreenshot({
+				data: {
+					id: screenshot.id,
+					userId: screenshot.userId,
+				},
+			});
+
+			toast.success("Screenshot deleted successfully!");
+			
+			// Close viewer and navigate back
+			navigate({
+				to: "/screenshots",
+				search: (prev: any) => {
+					const { screenshot: _, ...rest } = prev;
+					return rest;
+				},
+				replace: false,
+			});
+			onClose();
+		} catch (error) {
+			console.error("Failed to delete screenshot:", error);
+			toast.error("Failed to delete screenshot. Please try again.", 5000);
+		} finally {
+			setIsDeleting(false);
+		}
+	};
+
+	const handleCancelDelete = () => {
+		setShowDeleteDialog(false);
+	};
+
+	const handleToggleDownloadStatus = async () => {
+		try {
+			const result = await toggleDownloadStatus({
+				data: {
+					id: screenshot.id,
+					userId: screenshot.userId,
+					downloaded: !screenshot.downloaded,
+				},
+			});
+
+			if (result.success && result.screenshot && onUpdate) {
+				onUpdate(result.screenshot);
+				toast.success(
+					result.screenshot.downloaded
+						? "Marked as downloaded"
+						: "Unmarked as downloaded",
+					2000,
+				);
+			}
+		} catch (error) {
+			console.error("Failed to toggle download status:", error);
+			toast.error("Failed to update download status", 3000);
+		}
+	};
+
+	const handleRename = async (newFilename: string) => {
+		try {
+			const result = await renameScreenshot({
+				data: {
+					id: screenshot.id,
+					userId: screenshot.userId,
+					newFilename,
+				},
+			});
+
+			if (result.success && result.screenshot && onUpdate) {
+				onUpdate(result.screenshot);
+				toast.success("Screenshot renamed successfully", 2000);
+			}
+		} catch (error) {
+			console.error("Failed to rename screenshot:", error);
+			toast.error("Failed to rename screenshot", 3000);
+		}
 	};
 
 	const handleBackdropClick = (e: React.MouseEvent) => {
@@ -409,50 +575,36 @@ export function ScreenshotViewer({
 				message="You have unsaved changes. Do you want to discard them?"
 				confirmText="Discard"
 				cancelText="Keep Editing"
+				variant="warning"
 				onConfirm={handleDiscardConfirm}
 				onCancel={handleDiscardCancel}
 			/>
+			<ConfirmDialog
+				isOpen={showDeleteDialog}
+				title="Delete Screenshot?"
+				message="Are you sure you want to delete this screenshot? This action cannot be undone."
+				confirmText="Delete"
+				cancelText="Cancel"
+				variant="danger"
+				onConfirm={handleConfirmDelete}
+				onCancel={handleCancelDelete}
+			/>
 			<div className="fixed inset-0 z-50 bg-black/95 flex flex-col" onClick={handleBackdropClick}>
 			{/* Header */}
-			<div className="flex items-center justify-between p-4 bg-black/50 border-b border-white/10" onClick={(e) => e.stopPropagation()}>
-				<div className="flex-1 min-w-0">
-					<h2 className="text-lg font-semibold text-white truncate">
-						{screenshot.filename}
-					</h2>
-					<div className="flex items-center gap-4 text-sm text-white/60 mt-1">
-						<span>Uploaded: {formatDate(screenshot.uploadDate)}</span>
-						<span>Size: {formatFileSize(screenshot.fileSize)}</span>
-					</div>
-				</div>
-
-				<div className="flex items-center gap-2 ml-4">
-					{/* Download button with keyboard hint */}
-					<button
-						type="button"
-						onClick={handleDownload}
-						disabled={isDownloading}
-						className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-600/50 text-white rounded-lg transition-colors"
-						aria-label={`Download screenshot (${isDownloading ? "downloading" : "Cmd+D or Ctrl+D"})`}
-					>
-						<Download className="w-4 h-4" />
-						{isDownloading ? "Downloading..." : "Download"}
-						{!isDownloading && (
-							<KeyboardHint keys={["Cmd", "D"]} variant="compact" className="ml-1 opacity-70" />
-						)}
-					</button>
-
-					{/* Close button with ESC hint */}
-					<button
-						type="button"
-						onClick={handleClose}
-						className="flex items-center gap-2 p-2 hover:bg-white/10 rounded-lg transition-colors group"
-						aria-label="Close viewer (ESC key)"
-					>
-						<X className="w-6 h-6 text-white" />
-						<KeyboardHint keys="ESC" variant="compact" className="opacity-60 group-hover:opacity-100 transition-opacity" />
-					</button>
-				</div>
-			</div>
+			<ViewerHeader
+				ref={headerRef}
+				filename={screenshot.filename}
+				uploadDate={screenshot.uploadDate}
+				fileSize={screenshot.fileSize}
+				downloaded={screenshot.downloaded}
+				isDownloading={isDownloading}
+				isDeleting={isDeleting}
+				onRename={handleRename}
+				onDownload={handleDownload}
+				onDelete={handleDelete}
+				onToggleDownloadStatus={handleToggleDownloadStatus}
+				onClose={handleClose}
+			/>
 
 			{/* Main content */}
 			<div className="flex-1 flex overflow-hidden">
@@ -478,10 +630,7 @@ export function ScreenshotViewer({
 							className="absolute left-4 top-1/2 -translate-y-1/2 p-3 bg-black/50 hover:bg-black/70 rounded-full transition-colors group"
 							aria-label="Previous screenshot (Left arrow key)"
 						>
-							<div className="flex items-center gap-2">
-								<KeyboardHint keys="←" variant="compact" className="opacity-60 group-hover:opacity-100 transition-opacity" />
-								<ChevronLeft className="w-6 h-6 text-white" />
-							</div>
+							<KeyboardHint keys="←" variant="compact" className="opacity-80 group-hover:opacity-100 transition-opacity text-lg" />
 						</button>
 					)}
 
@@ -504,10 +653,7 @@ export function ScreenshotViewer({
 							className="absolute right-4 top-1/2 -translate-y-1/2 p-3 bg-black/50 hover:bg-black/70 rounded-full transition-colors group"
 							aria-label="Next screenshot (Right arrow key)"
 						>
-							<div className="flex items-center gap-2">
-								<ChevronRight className="w-6 h-6 text-white" />
-								<KeyboardHint keys="→" variant="compact" className="opacity-60 group-hover:opacity-100 transition-opacity" />
-							</div>
+							<KeyboardHint keys="→" variant="compact" className="opacity-80 group-hover:opacity-100 transition-opacity text-lg" />
 						</button>
 					)}
 
@@ -541,14 +687,11 @@ export function ScreenshotViewer({
 							<>
 								{screenshot.notes && screenshot.notes.trim() ? (
 									<>
-										<div className="flex-1 p-4 overflow-y-auto">
-											<MarkdownNotes
+										<div className="flex-1 p-4 overflow-y-auto scrollbar-thin scrollbar-thumb-white/20 scrollbar-track-transparent">
+											<MarkdownRenderer
 												content={screenshot.notes}
 												onHashtagClick={onHashtagClick ? handleHashtagClickInternal : undefined}
 											/>
-										</div>
-										<div className="px-4 pb-4 text-xs text-white/40 border-t border-white/10 pt-3">
-											Press <KeyboardHint keys="E" variant="inline" /> to edit
 										</div>
 									</>
 								) : (
@@ -587,17 +730,30 @@ export function ScreenshotViewer({
 									{/* Tag hint banner */}
 									<TagHintBanner userId={screenshot.userId} />
 
-									{/* AI Generate button */}
+									{/* AI buttons */}
 									{aiAvailable && (
-										<button
-											type="button"
-											onClick={handleGenerateWithAI}
-											disabled={isGeneratingAI}
-											className="w-full mb-3 flex items-center justify-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 disabled:from-purple-600/50 disabled:to-blue-600/50 text-white rounded-lg transition-colors"
-										>
-											<Sparkles className="w-4 h-4" />
-											{isGeneratingAI ? "Generating..." : "Generate with AI"}
-										</button>
+										<div className="flex gap-2 mb-3">
+											<button
+												type="button"
+												onClick={handleGenerateWithAI}
+												disabled={isGeneratingAI || isRefiningAI}
+												className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 disabled:from-purple-600/50 disabled:to-blue-600/50 text-white rounded-lg transition-colors"
+											>
+												<Sparkles className="w-4 h-4" />
+												{isGeneratingAI ? "Generating..." : "Generate with AI"}
+											</button>
+											{notes.trim() && (
+												<button
+													type="button"
+													onClick={handleRefineWithAI}
+													disabled={isGeneratingAI || isRefiningAI}
+													className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-700 hover:to-cyan-700 disabled:from-blue-600/50 disabled:to-cyan-600/50 text-white rounded-lg transition-colors"
+												>
+													<Sparkles className="w-4 h-4" />
+													{isRefiningAI ? "Refining..." : "Refine with AI"}
+												</button>
+											)}
+										</div>
 									)}
 								</div>
 
