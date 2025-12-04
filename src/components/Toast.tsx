@@ -61,7 +61,7 @@ function ToastItem({ toast, onClose }: ToastItemProps) {
 				styles[toast.type]
 			} ${
 				isExiting
-					? "opacity-0 translate-x-full"
+					? "opacity-0 -translate-x-full"
 					: "opacity-100 translate-x-0"
 			}`}
 		>
@@ -85,7 +85,7 @@ interface ToastContainerProps {
 
 export function ToastContainer({ toasts, onClose }: ToastContainerProps) {
 	return (
-		<div className="fixed top-4 right-4 z-50 flex flex-col gap-2 max-w-md w-full pointer-events-none">
+		<div className="fixed bottom-4 left-4 z-[70] flex flex-col gap-2 max-w-md w-full pointer-events-none">
 			{toasts.map((toast) => (
 				<div key={toast.id} className="pointer-events-auto">
 					<ToastItem toast={toast} onClose={onClose} />

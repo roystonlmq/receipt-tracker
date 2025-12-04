@@ -205,12 +205,24 @@ export async function saveFileToDirectory(
 		// Create a writable stream
 		const writable = await fileHandle.createWritable();
 
-		// Write the content
-		if (typeof content === "string") {
-			await writable.write(content);
+		// Convert content to appropriate format
+		let writeContent: Blob | string;
+		if (typeof content === "string" && content.startsWith("data:")) {
+			// Handle data URLs - convert to Blob
+			const base64Data = content.split(",")[1];
+			const mimeType = content.split(":")[1].split(";")[0];
+			const binaryData = atob(base64Data);
+			const bytes = new Uint8Array(binaryData.length);
+			for (let i = 0; i < binaryData.length; i++) {
+				bytes[i] = binaryData.charCodeAt(i);
+			}
+			writeContent = new Blob([bytes], { type: mimeType });
 		} else {
-			await writable.write(content);
+			writeContent = content;
 		}
+
+		// Write the content
+		await writable.write(writeContent);
 
 		// Close the stream
 		await writable.close();
@@ -230,6 +242,117 @@ export async function saveFileToDirectory(
 		}
 		
 		throw new Error(`Failed to save file: ${filename}`);
+	}
+}
+
+/**
+ * Get the name of a directory handle (without full path)
+ */
+export function getDirectoryName(
+	handle: FileSystemDirectoryHandle,
+): string {
+	return handle.name;
+}
+
+/**
+ * Update the stored directory handle
+ */
+export async function updateStoredDirectory(
+	handle: FileSystemDirectoryHandle,
+): Promise<void> {
+	await storeDirectoryHandle(handle);
+}
+
+/**
+ * Save multiple files to a directory
+ * Returns success status, directory name, and list of failed files
+ */
+export async function saveFilesToDirectory(
+	directoryHandle: FileSystemDirectoryHandle,
+	files: Array<{ filename: string; content: string | Blob }>,
+): Promise<{
+	success: boolean;
+	directoryName: string;
+	failedFiles: string[];
+}> {
+	const directoryName = getDirectoryName(directoryHandle);
+	const failedFiles: string[] = [];
+
+	// Save each file
+	for (const file of files) {
+		try {
+			await saveFileToDirectory(directoryHandle, file.filename, file.content);
+		} catch (error) {
+			console.error(`Failed to save file ${file.filename}:`, error);
+			failedFiles.push(file.filename);
+		}
+	}
+
+	return {
+		success: failedFiles.length === 0,
+		directoryName,
+		failedFiles,
+	};
+}
+
+/**
+ * Get stored directory or prompt user to select one
+ * Returns null if user cancels or API not supported
+ */
+export async function getOrPromptForDirectory(): Promise<{
+	handle: FileSystemDirectoryHandle | null;
+	isNewSelection: boolean;
+	cancelled: boolean;
+}> {
+	// Check if API is supported
+	if (!isFileSystemAccessSupported()) {
+		return {
+			handle: null,
+			isNewSelection: false,
+			cancelled: false,
+		};
+	}
+
+	try {
+		// Try to get stored directory first
+		const storedHandle = await getDownloadDirectory();
+		
+		if (storedHandle) {
+			// We have a valid stored directory
+			return {
+				handle: storedHandle,
+				isNewSelection: false,
+				cancelled: false,
+			};
+		}
+
+		// No stored directory, prompt user to select one
+		const newHandle = await pickDownloadDirectory();
+		
+		if (!newHandle) {
+			// User cancelled
+			return {
+				handle: null,
+				isNewSelection: false,
+				cancelled: true,
+			};
+		}
+
+		// Successfully selected new directory
+		return {
+			handle: newHandle,
+			isNewSelection: true,
+			cancelled: false,
+		};
+	} catch (error) {
+		console.error("Failed to get or prompt for directory:", error);
+		
+		// Return cancelled state on error
+		return {
+			handle: null,
+			isNewSelection: false,
+			cancelled: true,
+		};
 	}
 }
 
@@ -275,8 +398,95 @@ export function downloadFileFallback(
 
 /**
  * Download a file using showSaveFilePicker with directory memory
+ * This version remembers the last directory and suggests it for the next file
+ * Works with all directories including system directories
+ */
+export async function downloadFileWithPicker(
+	filename: string,
+	content: string | Blob,
+	mimeType?: string,
+): Promise<{ success: boolean; cancelled?: boolean; directoryName?: string }> {
+	// Check if showSaveFilePicker is supported
+	if (!("showSaveFilePicker" in window)) {
+		// Fall back to traditional download
+		downloadFileFallback(filename, content, mimeType);
+		return { success: true, cancelled: false };
+	}
+
+	try {
+		// Prepare blob content
+		let blobContent: Blob;
+		if (typeof content === "string" && content.startsWith("data:")) {
+			// Extract base64 data from data URL
+			const base64Data = content.split(",")[1];
+			const mimeTypeFromData = content.split(":")[1].split(";")[0];
+			const binaryData = atob(base64Data);
+			const bytes = new Uint8Array(binaryData.length);
+			for (let i = 0; i < binaryData.length; i++) {
+				bytes[i] = binaryData.charCodeAt(i);
+			}
+			blobContent = new Blob([bytes], {
+				type: mimeType || mimeTypeFromData || "application/octet-stream",
+			});
+		} else if (typeof content === "string") {
+			blobContent = new Blob([content], {
+				type: mimeType || "text/plain",
+			});
+		} else {
+			blobContent = content;
+		}
+
+		// Show save file picker
+		const options: any = {
+			suggestedName: filename,
+			types: [
+				{
+					description: "Files",
+					accept: {
+						[mimeType || "application/octet-stream"]: [
+							`.${filename.split(".").pop()}`,
+						],
+					},
+				},
+			],
+		};
+
+		const fileHandle = await (window as any).showSaveFilePicker(options);
+
+		// Write the file
+		const writable = await fileHandle.createWritable();
+		await writable.write(blobContent);
+		await writable.close();
+
+		// Try to get directory name (may not be available in all browsers)
+		let directoryName: string | undefined;
+		try {
+			// Some browsers don't expose the parent directory
+			directoryName = fileHandle.name ? fileHandle.name.split("/").slice(0, -1).pop() : undefined;
+		} catch {
+			// Ignore errors getting directory name
+		}
+
+		return { success: true, cancelled: false, directoryName };
+	} catch (error) {
+		// User cancelled
+		if (error instanceof Error && error.name === "AbortError") {
+			return { success: false, cancelled: true };
+		}
+		
+		console.error("Failed to use save file picker:", error);
+		
+		// Fall back to traditional download
+		downloadFileFallback(filename, content, mimeType);
+		return { success: true, cancelled: false };
+	}
+}
+
+/**
+ * Download a file using showSaveFilePicker with directory memory
  * Falls back to traditional download if not supported
  * Returns false if user cancels
+ * @deprecated Use downloadFileWithPicker instead
  */
 export async function downloadFile(
 	filename: string,

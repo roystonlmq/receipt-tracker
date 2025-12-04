@@ -25,7 +25,7 @@ The application uses a standardized filename format for all screenshots:
   - Supports OpenAI (GPT-4o-mini) and Anthropic (Claude 3.5 Sonnet)
 * Tag-based organization and search
 * Autocomplete suggestions for previously used hashtags
-* Download screenshots with notes as text files
+* Download screenshots with notes as text files (uses browser's native file picker with directory memory)
 * Rename screenshots
 * Delete screenshots (single or batch)
 * Screenshots are stored persistently in PostgreSQL database
@@ -109,6 +109,30 @@ Formats a DDMMYY date string for display (e.g., "271124" → "27/11/24").
 
 #### `extractFolderDate(filename: string): string`
 Extracts the DDMMYY date from a filename, or returns the current date if the filename doesn't follow the standard format.
+
+### File System Utilities (`src/utils/fileSystem.ts`)
+
+The application uses the browser's File System Access API for improved download functionality with automatic directory memory.
+
+#### `downloadFileWithPicker(filename: string, content: string | Blob, mimeType?: string)`
+Downloads a file using the browser's native save file picker. The browser automatically remembers the last-used directory and suggests it for subsequent downloads.
+
+**Parameters**:
+- `filename`: Name of the file to save
+- `content`: File content (string, Blob, or data URL)
+- `mimeType`: MIME type of the file (optional)
+
+**Returns**: `{ success: boolean, cancelled?: boolean, directoryName?: string }`
+
+**Browser Support**: Chrome/Edge 86+. Automatically falls back to traditional download in unsupported browsers.
+
+#### `downloadFileFallback(filename: string, content: string | Blob, mimeType?: string)`
+Traditional download method using blob URLs. Used as fallback when File System Access API is not supported.
+
+#### `isFileSystemAccessSupported(): boolean`
+Checks if the browser supports the File System Access API.
+
+**Note**: The browser's native file picker remembers the last directory you saved to, making it easy to organize screenshots into different project folders. This works with all directories including system directories like Downloads and Documents.
 
 ## Installation
 

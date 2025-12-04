@@ -3,7 +3,7 @@ import { X, ChevronLeft, ChevronRight, Download, Save, Sparkles } from "lucide-r
 import { useNavigate } from "@tanstack/react-router";
 import type { Screenshot } from "@/types/screenshot";
 import { updateScreenshotNotes, downloadScreenshotWithNotes } from "@/server/screenshots";
-import { downloadFile } from "@/utils/fileSystem";
+import { downloadFileWithPicker } from "@/utils/fileSystem";
 import { useToast } from "@/hooks/useToast";
 import { ToastContainer } from "@/components/Toast";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
@@ -293,7 +293,7 @@ export function ScreenshotViewer({
 		setIsDownloading(true);
 
 		try {
-			// Get screenshot with notes
+			// Get screenshot with notes from server
 			const result = await downloadScreenshotWithNotes({
 				data: {
 					id: screenshot.id,
@@ -301,38 +301,42 @@ export function ScreenshotViewer({
 				},
 			});
 
-			if (result.success && result.screenshot) {
-				// Download image using persistent directory
-				const imageResult = await downloadFile(
-					result.screenshot.filename,
-					result.screenshot.imageData,
-					result.screenshot.mimeType,
-				);
+			if (!result.success || !result.screenshot) {
+				throw new Error("Failed to fetch screenshot data");
+			}
 
-				// Check if user cancelled
-				if (imageResult.cancelled) {
-					// User cancelled - don't show error, just abort silently
+			// Download image file using showSaveFilePicker
+			const imageResult = await downloadFileWithPicker(
+				result.screenshot.filename,
+				result.screenshot.imageData,
+				result.screenshot.mimeType,
+			);
+
+			if (imageResult.cancelled) {
+				// User cancelled - don't show error, just abort silently
+				return;
+			}
+
+			// Download notes file if exists
+			if (result.screenshot.notes && result.screenshot.notes.trim()) {
+				const notesResult = await downloadFileWithPicker(
+					result.screenshot.notesFilename,
+					result.screenshot.notes,
+					"text/plain",
+				);
+				
+				if (notesResult.cancelled) {
+					// User cancelled notes - image was already saved
+					toast.success("Screenshot saved successfully!", 3000);
 					return;
 				}
+			}
 
-				// If image download succeeded, download notes if they exist
-				if (imageResult.success && result.screenshot.notes && result.screenshot.notes.trim()) {
-					const notesResult = await downloadFile(
-						result.screenshot.notesFilename,
-						result.screenshot.notes,
-						"text/plain",
-					);
-					
-					// Check if user cancelled notes download
-					if (notesResult.cancelled) {
-						return;
-					}
-				}
-
-				// Show success message only if download completed
-				if (imageResult.success) {
-					toast.success("Files saved successfully!", 3000);
-				}
+			// Show success message
+			if (imageResult.directoryName) {
+				toast.success(`Files saved to "${imageResult.directoryName}"`, 5000);
+			} else {
+				toast.success("Files saved successfully!", 3000);
 			}
 		} catch (error) {
 			console.error("Failed to download:", error);
@@ -354,8 +358,6 @@ export function ScreenshotViewer({
 						"Your browser doesn't support this feature. Using standard download instead.",
 						7000,
 					);
-					// Try fallback download
-					// This would be handled by the downloadFile function automatically
 				} else {
 					toast.error(`Download failed: ${error.message}`, 7000);
 				}
